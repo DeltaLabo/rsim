@@ -5,7 +5,7 @@ Room sound intensity meter
 
 > This section will be removed after development is complete.
 
-- At first the XIAO ESP32 could be programmed by following the guide linked in the setup section. However, it now throws `Failed uploading: uploading error: exit status 2` whenever *any* code is uploaded.
+- At first the XIAO ESP32 could be programmed by following the guide linked in the setup section. However, it now throws `Failed uploading: uploading error: exit status 2` whenever *any* code is uploaded. The problem is not related to the USB-C cable.
 - The audio input from the mic was succesfully read via I2S and plotted.
 
 ### To-do
@@ -13,6 +13,7 @@ Room sound intensity meter
 > This section will be removed after development is complete.
 
 - [ ] Determine why the ESP32 can't be programmed via the Arduino IDE.
+    - [ ] Try another ESP32.
 - [ ] Draw the connections diagram.
 - [ ] Determine why the audio input is in 16-bit format instead of 24-bit like the datasheet says.
 - [ ] Verify that the maximum and minimum inputs are 120 and 33 dB SPL.
