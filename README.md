@@ -5,15 +5,14 @@ Room sound intensity meter
 
 > This section will be removed after development is complete.
 
-- At first the XIAO ESP32 could be programmed by following the guide linked in the setup section. However, it now throws `Failed uploading: uploading error: exit status 2` whenever *any* code is uploaded. The problem is not related to the USB-C cable.
 - The audio input from the mic was succesfully read via I2S and plotted.
+- Now the units of the input have to be determined and converted to decibels.
+- The code upload bug was fixed. See the [Troubleshooting](https://github.com/DeltaLabo/rsim#troubleshooting) section.
 
 ### To-do
 
 > This section will be removed after development is complete.
 
-- [ ] Determine why the ESP32 can't be programmed via the Arduino IDE.
-    - [ ] Try another ESP32.
 - [ ] Draw the connections diagram.
 - [ ] Determine why the audio input is in 16-bit format instead of 24-bit like the datasheet says.
 - [ ] Verify that the maximum and minimum inputs are 120 and 33 dB SPL.
@@ -21,7 +20,7 @@ Room sound intensity meter
 - [ ] Design the block diagram for the alert system.
 - [ ] Write the docs.
 
-### What is this repository for? ###
+### What is this repository for?
 
 * This repository was created to develop an ESP32-based ambient noise level meter, that can send alerts via instant messaging.
 
@@ -37,7 +36,7 @@ Room sound intensity meter
 * Model: INMP441 I2S digital microphone
 * [Datasheet](https://invensense.tdk.com/wp-content/uploads/2015/02/INMP441.pdf)
 
-### How do I set up? ###
+### How do I set up?
 
 * Install Git
 * Install Arduino IDE
@@ -47,6 +46,18 @@ Room sound intensity meter
 ![Connection diagram for the XIAO ESP32C3 microcontroller and the INMP441 digital microphopne.](./connection_diagram.png)
 
 * Clone this repo and upload `main.ino` to the ESP32
+
+### Troubleshooting
+
+#### The error `A fatal error occurred: No serial data received.` shows when trying to upload via Arduino IDE.
+
+1. While holding the `B` button on the ESP32, press the `R` button.
+1. Release the `R` button, and then `B`.
+1. Re-upload the code.
+
+#### The code was succesfully uploaded, but the programmer is stuck in `Hard resetting via RTS pin...`.
+
+- Press the `R` button once. The code should now be running.
 
 ### Contribution guidelines ###
 
