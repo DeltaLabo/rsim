@@ -13,6 +13,7 @@ Room sound intensity meter
 > This section will be removed after development is complete.
 
 - [ ] Determine why the ESP32 can't be programmed via the Arduino IDE.
+- [ ] Draw the connections diagram.
 - [ ] Determine why the audio input is in 16-bit format instead of 24-bit like the datasheet says.
 - [ ] Verify that the maximum and minimum inputs are 120 and 33 dB SPL.
 - [ ] Convert the microphone input to decibels (SPL).
