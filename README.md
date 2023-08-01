@@ -6,7 +6,7 @@ Room sound intensity meter
 > This section will be removed after development is complete.
 
 - At first the XIAO ESP32 could be programmed by following the guide linked in the setup section. However, it now throws `Failed uploading: uploading error: exit status 2` whenever *any* code is uploaded.
-- The audio input from the mic was succesfully read via I2s and plotted.
+- The audio input from the mic was succesfully read via I2S and plotted.
 
 ### To-do
 
