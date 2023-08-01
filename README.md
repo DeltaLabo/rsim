@@ -1,55 +1,56 @@
 Room sound intensity meter
 ============
 
-#CAMBIAR TODO
+### Project status
+
+> This section will be removed after development is complete.
+
+- At first the XIAO ESP32 could be programmed by following the guide linked in the setup section. However, it now throws `Failed uploading: uploading error: exit status 2` whenever *any* code is uploaded.
+- The audio input from the mic was succesfully read via I2s and plotted.
+
+### To-do
+
+> This section will be removed after development is complete.
+
+- [ ] Determine why the ESP32 can't be programmed via the Arduino IDE.
+- [ ] Determine why the audio input is in 16-bit format instead of 24-bit like the datasheet says.
+- [ ] Verify that the maximum and minimum inputs are 120 and 33 dB SPL.
+- [ ] Convert the microphone input to decibels (SPL).
+- [ ] Design the block diagram for the alert system.
+- [ ] Write the docs.
 
 ### What is this repository for? ###
 
-* This repository was created to develop and ESP32 based embedded logger and cloud uploader for wind turbine power generation, and wind velocity data for LIENE.
-
-### Turbine info
-
-* [Info page](https://mwands.com/missouri-raptor-g4-wind-turbine-generator) 
-
-### Anemometer info
-
-* Model: Inspeed Vortex
-* [Documentation page](http://www.old.inspeed.com/anemometers/Vortex_Wind_Sensor.asp)
+* This repository was created to develop an ESP32-based ambient noise level meter, that can send alerts via instant messaging.
 
 ### Microcontroller info
 
-* Model: HELTEC LoRa 32
-* [Documentation page](https://heltec.org/project/wifi-lora-32/)
-* [Pinout diagram](https://resource.heltec.cn/download/WiFi_LoRa_32/WIFI_LoRa_32_V2.pdf)
-* [Schematic](https://resource.heltec.cn/download/WiFi_LoRa_32/V2/WIFI_LoRa_32_V2(868-915).PDF)
-* [ESP32 datasheet](https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf) 
+* Model: Seeed Studio XIAO ESP32C3
+* [Documentation page](https://wiki.seeedstudio.com/XIAO_ESP32C3_Getting_Started/)
+* [Pinout diagram](https://files.seeedstudio.com/wiki/XIAO_WiFi/pin_map-2.png)
+* [ESP32 datasheet](https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf)
 
-### Enclousure
+### Microphone info
 
-* [Page](https://www.se.com/es/es/product/NSYCRN33200P/spacial-crn-plain-door-with-mount.plate.-h300xw300xd200-ip66-ik10-ral7035../) 
-* [Page](https://mazcr.com/gabinetes-cajas-y-accesorios-plasticos/458040-caja-paso-162x212x110.html)
+* Model: INMP441 I2S digital microphone
+* [Datasheet](https://invensense.tdk.com/wp-content/uploads/2015/02/INMP441.pdf)
 
-### How do I get set up? ###
+### How do I set up? ###
 
 * Install Git
 * Install Arduino IDE
-* Follow this [instructions](https://heltec-automation-docs.readthedocs.io/en/latest/esp32/quick_start.html) 
-* Install Heltec ESP32 Library in the Arduino Library Manager
-Open Arduino IDE, then Select `Sketch`->`Include Library`->`Manage Libraries...`
-Search `Heltec ESP32` and install it.
-* Install Adafruit MQTT Library in the Arduino Library Manager
-Open Arduino IDE, then Select `Sketch`->`Include Library`->`Manage Libraries...`
-Search `Adafruit MQTT` and install it.
+* Follow these [instructions](https://wiki.seeedstudio.com/XIAO_ESP32C3_Getting_Started/#getting-started) to set up the XIAO ESP32 in the Arduino IDE
+* Connect the components as shown in this diagram
 
-### Library source code and examples
-* [Adafruit_MQTT_Library](https://github.com/adafruit/Adafruit_MQTT_Library)
+![Connection diagram for the XIAO ESP32C3 microcontroller and the INMP441 digital microphopne.](./connection_diagram.png)
+
+* Clone this repo and upload `main.ino` to the ESP32
 
 ### Contribution guidelines ###
 
-* If you want to propose a review or need to modify the code for any reason first clone this [repository](https://github.com/DeltaLabo/anemos) in your PC and create a new branch for your changes. Once your changes are complete and fully tested ask the administrator permission to push this new branch into the source.
+* If you want to propose a change or need to modify the code for any reason first clone this [repository](https://github.com/DeltaLabo/rsim) to your PC and create a new branch for your changes. Once your changes are complete and fully tested ask the administrator permission to push this new branch into the source.
 * If you just want to do local changes instead you can download a zip version of the repository and do all changes locally in your PC. 
 
 ### Who do I talk to? ###
 
 * [Juan J. Rojas](mailto:juan.rojas@itcr.ac.cr)
-* [Nestor Martinez](mailto:arnold7martinez@gmail.com)
