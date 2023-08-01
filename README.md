@@ -55,7 +55,7 @@ Room sound intensity meter
 1. Release the `R` button, and then `B`.
 1. Re-upload the code.
 
-#### The code was succesfully uploaded, but the programmer is stuck in `Hard resetting via RTS pin...`.
+#### The code was successfully uploaded, but the programmer is stuck in `Hard resetting via RTS pin...`.
 
 - Press the `R` button once. The code should now be running.
 
