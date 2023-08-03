@@ -14,9 +14,8 @@ Room sound intensity meter
 > This section will be removed after development is complete.
 
 - [ ] Draw the connections diagram.
-- [ ] Determine why the audio input is in 16-bit format instead of 24-bit like the datasheet says.
-- [ ] Verify that the maximum and minimum inputs are 120 and 33 dB SPL.
-- [ ] Convert the microphone input to decibels (SPL).
+- [ ] Test the dB measurements against another meter.
+- [ ] The code in `main.ino` uses the GNU GPL license. Change the repo's license or write equivalent code. 
 - [ ] Design the block diagram for the alert system.
 - [ ] Write the docs.
 
