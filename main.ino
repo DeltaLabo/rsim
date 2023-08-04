@@ -45,7 +45,7 @@
 //
 
 #define LEQ_PERIOD        .125           // second(s)
-#define WEIGHTING         A_weighting // 'A_weighting' 'C_weighting' or 'None' (Z_weighting)
+#define WEIGHTING         C_weighting // 'A_weighting' 'C_weighting' or 'None' (Z_weighting)
 #define LEQ_UNITS         "LCeq"      // customize based on above weighting used
 #define DB_UNITS          "dBC"       // customize based on above weighting used
 #define USE_DISPLAY       0
@@ -53,7 +53,7 @@
 
 // NOTE: Some microphones require at least DC-Blocker filter
 #define MIC_EQUALIZER     INMP441    // See below for defined IIR filters or set to 'None' to disable
-#define MIC_OFFSET_DB     3.0103      // Default offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration
+#define MIC_OFFSET_DB     0.0      // Default offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration. Default is 3.0103
 
 // Customize these values from microphone datasheet
 #define MIC_SENSITIVITY   -26         // dBFS value expected at MIC_REF_DB (Sensitivity value from datasheet)
@@ -415,7 +415,7 @@ void setup() {
       Leq_samples = 0;
       
       // Serial output, customize (or remove) as needed
-      Serial.printf("%.1f\n", Leq_dB);
+      Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS);
 
       // Debug only
       //Serial.printf("%u processing ticks\n", q.proc_ticks);
