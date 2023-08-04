@@ -39,17 +39,17 @@
  */
 
 #include <driver/i2s.h>
-#include "sos-iir-filter.h"
 
 //
 // Configuration
 //
 
-#define LEQ_PERIOD        1           // second(s)
-#define WEIGHTING         C_weighting // Also avaliable: 'C_weighting' or 'None' (Z_weighting)
+#define LEQ_PERIOD        .125           // second(s)
+#define WEIGHTING         A_weighting // 'A_weighting' 'C_weighting' or 'None' (Z_weighting)
 #define LEQ_UNITS         "LCeq"      // customize based on above weighting used
 #define DB_UNITS          "dBC"       // customize based on above weighting used
 #define USE_DISPLAY       0
+#define USE_ESP32_FUNCS   0           // Use ESP32-native functions for dB calculation, or C functions
 
 // NOTE: Some microphones require at least DC-Blocker filter
 #define MIC_EQUALIZER     INMP441    // See below for defined IIR filters or set to 'None' to disable
@@ -94,6 +94,11 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
   SSD1306Wire display(0x3c, SDA, SCL, OLED_GEOMETRY);
 #endif
 
+#if (USE_ESP32_FUNCS > 0)
+  #include "sos-iir-filter-esp32.h"
+#else
+  #include "sos-iir-filter-c.h"
+#endif
 
 //
 // IIR Filters
