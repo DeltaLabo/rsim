@@ -9,7 +9,7 @@ MAX_YELLOW = 60.0
 
 # Set the serial port and baud rate here
 serial_port = "COM3"  # Replace with your desired serial port
-baudrate = 115200
+baudrate = 112500
 
 data = 0
 units = ""
@@ -27,17 +27,19 @@ def read_serial_data(serial_port, baudrate, text_var):
         with serial.Serial(serial_port, baudrate=baudrate, timeout=1) as ser:
             while True:
                 line = ser.readline().decode().strip()
-                text_var.set(line)
-                # Split the data and the units
-                data, units = line.split(" ")
+
                 try:
+                    # Split the data and the units
+                    data, units = line.split(" ")
                     # Convert the input string to a float
                     data = float(data)
+                    text_var.set(line)
+                    # Change the text color based on the value
+                    noise2color(data)
                 # Catch the error that throws when the input is occasionally corrupted
                 except ValueError:
                     data = 0.0
-                # Change the text color based on the value
-                noise2color(data)
+
     except serial.SerialException as e:
         text_var.set("Error: " + str(e))
 
