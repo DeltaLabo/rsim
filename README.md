@@ -1,24 +1,6 @@
 Room sound intensity meter
 ============
 
-### Project status
-
-> This section will be removed after development is complete.
-
-- The audio input from the mic was succesfully read via I2S and converted to dBA or dBC.
-- The measurements are around 40-50 dBC in a quiet room, which is higher than expected. 
-
-### To-do
-
-> This section will be removed after development is complete.
-
-- [ ] Draw the connections diagram.
-- [ ] Test the dB measurements against a calibrated, reliable meter.
-- [ ] Modify the IIR filter to match the output of the calibrated meter.
-- [ ] The code in `main.ino` uses the GNU GPL license. Change the repo's license or write equivalent code. 
-- [ ] Design the block diagram for the alert system.
-- [ ] Write the docs.
-
 ### What is this repository for?
 
 * This repository was created to develop an ESP32-based ambient noise level meter, that can send alerts via instant messaging.
