@@ -44,16 +44,21 @@
 // Configuration
 //
 
-#define LEQ_PERIOD        .125           // second(s)
-#define WEIGHTING         C_weighting // 'A_weighting' 'C_weighting' or 'None' (Z_weighting)
-#define LEQ_UNITS         "LCeq"      // customize based on above weighting used
-#define DB_UNITS          "dBC"       // customize based on above weighting used
-#define USE_DISPLAY       0
-#define USE_ESP32_FUNCS   0           // Use ESP32-native functions for dB calculation, or C functions
+#include "params.h"
+#ifndef PARAMS_H
+// Use default parameters if params.h is missing
+#define LEQ_PERIOD        1.0           // second(s)
+#define WEIGHTING         A_weighting // 'A_weighting' 'C_weighting' or 'None' (Z_weighting)
+#define LEQ_UNITS         "LAeq"      // customize based on above weighting used
+#define DB_UNITS          "dBA"       // customize based on above weighting used
+#define MIC_OFFSET_DB     0.0      // Default offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration. Default is 3.0103
+#endif
 
 // NOTE: Some microphones require at least DC-Blocker filter
 #define MIC_EQUALIZER     INMP441    // See below for defined IIR filters or set to 'None' to disable
-#define MIC_OFFSET_DB     0.0      // Default offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration. Default is 3.0103
+
+#define USE_DISPLAY       0
+#define USE_ESP32_FUNCS   0           // Use ESP32-native functions for dB calculation, or C functions
 
 // Customize these values from microphone datasheet
 #define MIC_SENSITIVITY   -26         // dBFS value expected at MIC_REF_DB (Sensitivity value from datasheet)
@@ -389,18 +394,18 @@ void setup() {
   double Leq_sum_sqr = 0;
   double Leq_dB = 0;
 
-  // Read sum of samaples, calculated by 'i2s_reader_task'
+  // Read sum of samples, calculated by 'i2s_reader_task'
   while (xQueueReceive(samples_queue, &q, portMAX_DELAY)) {
 
     // Calculate dB values relative to MIC_REF_AMPL and adjust for microphone reference
     double short_RMS = sqrt(double(q.sum_sqr_SPL) / SAMPLES_SHORT);
     double short_SPL_dB = MIC_OFFSET_DB + MIC_REF_DB + 20 * log10(short_RMS / MIC_REF_AMPL);
 
-    // In case of acoustic overload or below noise floor measurement, report infinty Leq value
+    // In case of acoustic overload or below noise floor measurement, report limit Leq value
     if (short_SPL_dB > MIC_OVERLOAD_DB) {
-      Leq_sum_sqr = INFINITY;
+      Leq_sum_sqr = 120.0;
     } else if (isnan(short_SPL_dB) || (short_SPL_dB < MIC_NOISE_DB)) {
-      Leq_sum_sqr = -INFINITY;
+      Leq_sum_sqr = 33;
     }
 
     // Accumulate Leq sum
