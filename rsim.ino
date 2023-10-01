@@ -36,9 +36,14 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 //
 // Below ones are just example for my board layout, put here the pins you will use
 //
-#define I2S_WS D3
-#define I2S_SD D9
-#define I2S_SCK D7
+#define I2S_WS D1
+#define I2S_SD D7
+#define I2S_SCK D2
+
+// LED indicator pins
+#define RED_LED_PIN D3
+#define YELLOW_LED_PIN D6
+#define GREEN_LED_PIN D5
 
 // I2S peripheral to use (0 or 1)
 #define I2S_PORT          I2S_NUM_0
@@ -247,6 +252,21 @@ void mic_i2s_reader_task(void* parameter) {
   }
 }
 
+// Update the LED indicators depending on Leq value
+void updateLEDColor(int Leq_dB){
+  // Turn all the LEDs off
+  digitalWrite(RED_LED_PIN, HIGH);
+  digitalWrite(YELLOW_LED_PIN, HIGH);
+  digitalWrite(GREEN_LED_PIN, HIGH);
+
+  // Turn the Green LED on if Leq is less than 50 dB
+  if (Leq_dB < 50) digitalWrite(GREEN_LED_PIN, LOW);
+  // Turn the Yellow LED on if Leq is less than 70 dB
+  else if (Leq_dB < 75) digitalWrite(YELLOW_LED_PIN, LOW);
+  // Turn the Yellow LED on if Leq is greater than or equal to 70 dB
+  else digitalWrite(RED_LED_PIN, LOW);
+}
+
 //
 // Setup and main loop 
 //
@@ -261,6 +281,15 @@ void setup() {
   
   Serial.begin(112500);
   delay(1000); // Safety
+
+  // Initialize indicator LEDs
+  pinMode(RED_LED_PIN, OUTPUT);
+  pinMode(YELLOW_LED_PIN, OUTPUT);
+  pinMode(GREEN_LED_PIN, OUTPUT);
+  // The LEDs are driven by negative logic
+  digitalWrite(RED_LED_PIN, HIGH);
+  digitalWrite(YELLOW_LED_PIN, HIGH);
+  digitalWrite(GREEN_LED_PIN, HIGH);
   
   #if (USE_DISPLAY > 0)
     display.init();
@@ -312,6 +341,7 @@ void setup() {
       
       // Serial output, customize (or remove) as needed
       Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS);
+      updateLEDColor(Leq_dB);
 
       // Debug only
       //Serial.printf("%u processing ticks\n", q.proc_ticks);
