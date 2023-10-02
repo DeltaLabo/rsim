@@ -48,7 +48,7 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 // I2S peripheral to use (0 or 1)
 #define I2S_PORT          I2S_NUM_0
 
-#include "sos-iir-filter-xtensa.h"
+#include "sos-iir-filter-riscv.h"
 
 //
 // IIR Filters
