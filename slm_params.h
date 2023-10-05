@@ -1,7 +1,6 @@
 // Parameter file for the dB meter
 // These are in a separate file to avoid updating the versioned main.ino file just to change them
 
-// Uncomment to overwrite the default parameters in main.ino
 #ifndef PARAMS_H
 #define PARAMS_H
 
