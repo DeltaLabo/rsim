@@ -1,10 +1,18 @@
 #include <driver/i2s.h>
+#include <SoftwareSerial.h>
+#include "slm_params.h"
+#include "sos-iir-filter-c.h"
 
 //
 // Configuration
 //
 
-#include "slm_params.h"
+#define USE_SOFTWARE_SERIAL 0
+
+#define SOFT_TX_PIN D0
+#define SOFT_RX_PIN D1
+
+EspSoftwareSerial::UART softwareSerial;
 
 // NOTE: Some microphones require at least DC-Blocker filter
 #define MIC_EQUALIZER     INMP441    // See below for defined IIR filters or set to 'None' to disable
@@ -28,22 +36,21 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 //
 // Below ones are just example for my board layout, put here the pins you will use
 //
-#define I2S_WS D1
+#define I2S_WS D2
 #define I2S_SD D7
-#define I2S_SCK D2
-
-// LED indicator pins
-#define RED_LED_PIN D3
-#define YELLOW_LED_PIN D6
-#define GREEN_LED_PIN D5
+#define I2S_SCK D3
 
 // LED indicator toggle
 #define USE_LED_INDICATOR 0
 
+// LED indicator pins
+#define RED_LED_PIN D4
+#define YELLOW_LED_PIN D6
+#define GREEN_LED_PIN D5
+
+
 // I2S peripheral to use (0 or 1)
 #define I2S_PORT          I2S_NUM_0
-
-#include "sos-iir-filter-c.h"
 
 //
 // IIR Filters
@@ -272,9 +279,20 @@ void setup() {
 
   // If needed, now you can actually lower the CPU frquency,
   // i.e. if you want to (slightly) reduce ESP32 power consumption 
-  setCpuFrequencyMhz(80); // It should run as low as 80MHz
-  
-  Serial.begin(112500);
+  setCpuFrequencyMhz(160); // It should run as low as 80MHz
+
+  if (USE_SOFTWARE_SERIAL == 0) Serial.begin(112500);
+  else{
+    softwareSerial.begin(9600, SWSERIAL_8N1, D9, D10, false);
+    if (!softwareSerial) { // If the object did not initialize, then its configuration is invalid
+      Serial.begin(112500);
+      Serial.println("Invalid EspSoftwareSerial pin configuration, check config");
+      while (1) { // Don't continue with invalid configuration
+        delay (1000);
+      }
+    } 
+  }
+
   delay(1000); // Safety
 
   if (USE_LED_INDICATOR == 1){
@@ -312,9 +330,9 @@ void setup() {
 
     // In case of acoustic overload or below noise floor measurement, report limit Leq value
     if (short_SPL_dB > MIC_OVERLOAD_DB) {
-      Leq_sum_sqr = 120.0;
+      Leq_sum_sqr = INFINITY;
     } else if (isnan(short_SPL_dB) || (short_SPL_dB < MIC_NOISE_DB)) {
-      Leq_sum_sqr = 33;
+      Leq_sum_sqr = -INFINITY;
     }
 
     // Accumulate Leq sum
@@ -329,7 +347,8 @@ void setup() {
       Leq_samples = 0;
       
       // Serial output, customize (or remove) as needed
-      Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS);
+      if (USE_SOFTWARE_SERIAL == 0) Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS);
+      else softwareSerial.printf("%.1f %s\n", Leq_dB, DB_UNITS);
       if (USE_LED_INDICATOR == 1) updateLEDColor(Leq_dB);
 
       // Debug only
