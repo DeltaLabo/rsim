@@ -37,6 +37,9 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 #define YELLOW_LED_PIN D6
 #define GREEN_LED_PIN D5
 
+// LED indicator toggle
+#define USE_LED_INDICATOR 0
+
 // I2S peripheral to use (0 or 1)
 #define I2S_PORT          I2S_NUM_0
 
@@ -274,22 +277,16 @@ void setup() {
   Serial.begin(112500);
   delay(1000); // Safety
 
-  // Initialize indicator LEDs
-  pinMode(RED_LED_PIN, OUTPUT);
-  pinMode(YELLOW_LED_PIN, OUTPUT);
-  pinMode(GREEN_LED_PIN, OUTPUT);
-  // The LEDs are driven by negative logic
-  digitalWrite(RED_LED_PIN, HIGH);
-  digitalWrite(YELLOW_LED_PIN, HIGH);
-  digitalWrite(GREEN_LED_PIN, HIGH);
-  
-  #if (USE_DISPLAY > 0)
-    display.init();
-    #if (OLED_FLIP_V > 0)
-      display.flipScreenVertically();
-    #endif
-    display.setFont(ArialMT_Plain_16);
-  #endif
+  if (USE_LED_INDICATOR == 1){
+    // Initialize indicator LEDs
+    pinMode(RED_LED_PIN, OUTPUT);
+    pinMode(YELLOW_LED_PIN, OUTPUT);
+    pinMode(GREEN_LED_PIN, OUTPUT);
+    // The LEDs are driven by negative logic
+    digitalWrite(RED_LED_PIN, HIGH);
+    digitalWrite(YELLOW_LED_PIN, HIGH);
+    digitalWrite(GREEN_LED_PIN, HIGH);
+  }
 
   // Create FreeRTOS queue
   samples_queue = xQueueCreate(8, sizeof(sum_queue_t));
@@ -333,7 +330,7 @@ void setup() {
       
       // Serial output, customize (or remove) as needed
       Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS);
-      updateLEDColor(Leq_dB);
+      if (USE_LED_INDICATOR == 1) updateLEDColor(Leq_dB);
 
       // Debug only
       //Serial.printf("%u processing ticks\n", q.proc_ticks);
