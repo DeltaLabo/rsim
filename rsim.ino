@@ -33,9 +33,6 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 // I2S pins - Can be routed to almost any (unused) ESP32 pin.
 //            SD can be any pin, inlcuding input only pins (36-39).
 //            SCK (i.e. BCLK) and WS (i.e. L/R CLK) must be output capable pins
-//
-// Below ones are just example for my board layout, put here the pins you will use
-//
 #define I2S_WS D2
 #define I2S_SD D7
 #define I2S_SCK D3
@@ -109,7 +106,7 @@ SOS_IIR_Filter A_weighting = {
 
 //
 // C-weighting IIR Filter, Fs = 48KHz 
-// Designed by invfreqz curve-fitting, see respective .m file
+// Designed by invfreqz curve-fitting
 // B = [-0.49164716933714026, 0.14844753846498662, 0.74117815661529129, -0.03281878334039314, -0.29709276192593875, -0.06442545322197900, -0.00364152725482682]
 // A = [1.0, -1.0325358998928318, -0.9524000181023488, 0.8936404694728326   0.2256286147169398  -0.1499917107550188, 0.0156718181681081]
 SOS_IIR_Filter C_weighting = {
@@ -152,8 +149,6 @@ float samples[SAMPLES_SHORT] __attribute__((aligned(4)));
 //
 void mic_i2s_init() {
   // Setup I2S to sample mono channel for SAMPLE_RATE * SAMPLE_BITS
-  // NOTE: Recent update to Arduino_esp32 (1.0.2 -> 1.0.3)
-  //       seems to have swapped ONLY_LEFT and ONLY_RIGHT channels
   const i2s_config_t i2s_config = {
     mode: i2s_mode_t(I2S_MODE_MASTER | I2S_MODE_RX),
     sample_rate: SAMPLE_RATE,
@@ -185,15 +180,6 @@ void mic_i2s_init() {
   #endif
   
   i2s_set_pin(I2S_PORT, &pin_config);
-
-  //FIXME: There is a known issue with esp-idf and sampling rates, see:
-  //       https://github.com/espressif/esp-idf/issues/2634
-  //       In the meantime, the below line seems to set sampling rate at ~47999.992Hz
-  //       fifs_req=24576000, sdm0=149, sdm1=212, sdm2=5, odir=2 -> fifs_reached=24575996  
-  //NOTE:  This seems to be fixed in ESP32 Arduino 1.0.4, esp-idf 3.2
-  //       Should be safe to remove...
-  //#include <soc/rtc.h>
-  //rtc_clk_apll_enable(1, 149, 212, 5, 2);
 }
 
 //
@@ -201,10 +187,9 @@ void mic_i2s_init() {
 //
 // Rationale for separate task reading I2S is that IIR filter
 // processing cam be scheduled to different core on the ESP32
-// while main task can do something else, like update the 
-// display in the example
+// while main task can do something else
 //
-// As this is intended to run as separate hihg-priority task, 
+// As this is intended to run as separate high-priority task, 
 // we only do the minimum required work with the I2S data
 // until it is 'compressed' into sum of squares 
 //
@@ -238,12 +223,13 @@ void mic_i2s_reader_task(void* parameter) {
     for(int i=0; i<SAMPLES_SHORT; i++) samples[i] = MIC_CONVERT(int_samples[i]);
 
     sum_queue_t q;
-    // Apply equalization and calculate Z-weighted sum of squares, 
+    // Apply equalization and calculate Z-weighted sum of squares,
     // writes filtered samples back to the same buffer.
     q.sum_sqr_SPL = MIC_EQUALIZER.filter(samples, samples, SAMPLES_SHORT);
 
     // Apply weighting and calucate weigthed sum of squares
     q.sum_sqr_weighted = WEIGHTING.filter(samples, samples, SAMPLES_SHORT);
+
 
     // Debug only. Ticks we spent filtering and summing block of I2S data
     q.proc_ticks = xTaskGetTickCount() - start_tick;
@@ -349,6 +335,7 @@ void setup() {
       // Serial output, customize (or remove) as needed
       if (USE_SOFTWARE_SERIAL == 0) Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS);
       else softwareSerial.printf("%.1f %s\n", Leq_dB, DB_UNITS);
+
       if (USE_LED_INDICATOR == 1) updateLEDColor(Leq_dB);
 
       // Debug only
