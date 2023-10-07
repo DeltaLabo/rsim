@@ -35,6 +35,7 @@ __asm__ (
   ".globl sos_filter_f32    \n"
   ".type   sos_filter_f32,@function\n"
   "sos_filter_f32:          \n"
+  "  addi sp, sp, -16       \n"
   "  flw     f0, 0(a5)      \n" // float f0 = coeffs.b1;
   "  flw     f1, 4(a5)      \n" // float f1 = coeffs.b2;
   "  flw     f2, 8(a5)      \n" // float f2 = coeffs.a1;
@@ -87,6 +88,7 @@ __asm__ (
   ".globl sos_filter_sum_sqr_f32 \n"
   ".type   sos_filter_sum_sqr_f32,@function \n"
   "sos_filter_sum_sqr_f32:  \n"
+  "  addi sp, sp, -16       \n"
   "  flw     f0, 0(a5)      \n" // float f0 = coeffs.b1;
   "  flw     f1, 4(a5)      \n" // float f1 = coeffs.b2;
   "  flw     f2, 8(a5)      \n" // float f2 = coeffs.a1;
