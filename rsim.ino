@@ -13,8 +13,6 @@
 
 // U8x8 Contructor
 // The complete list is available here: https://github.com/olikraus/u8g2/wiki/u8x8setupcpp
-//- For SPI SSD1306 -
-//U8X8_SSD1306_128X64_NONAME_4W_HW_SPI u8x8(/* cs=/ U8X8_PIN_NONE, / dc=/ TFTspi_DC, / reset=*/ TFTspi_RST);
 //- For I2C SSD1306 -
 U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE); 
 
@@ -25,7 +23,7 @@ U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);
 #define MIC_SENSITIVITY   -26         // dBFS value expected at MIC_REF_DB (Sensitivity value from datasheet)
 #define MIC_REF_DB        94.0        // Value at which point sensitivity is specified in datasheet (dB)
 #define MIC_OVERLOAD_DB   120.0       // dB - Acoustic overload point
-#define MIC_NOISE_DB      33          // dB - Noise floor
+#define MIC_NOISE_DB      33.0        // dB - Noise floor
 #define MIC_BITS          24          // valid number of bits in I2S data
 #define MIC_CONVERT(s)    (s >> (SAMPLE_BITS - MIC_BITS))
 #define MIC_TIMING_SHIFT  0           // Set to one to fix MSB timing for some microphones, i.e. SPH0645LM4H-x
@@ -266,7 +264,7 @@ void u8x8print(int Leq_dB){
   u8x8.setCursor(0,1);
   //u8x8.printf("%.1f %s\n", Leq_dB, DB_UNITS);
   u8x8.print(Leq_dB);
-  }
+}
 
 //
 // Setup and main loop 
@@ -319,11 +317,13 @@ void setup() {
     double short_SPL_dB = MIC_OFFSET_DB + MIC_REF_DB + 20 * log10(short_RMS / MIC_REF_AMPL);
 
     // In case of acoustic overload or below noise floor measurement, report limit Leq value
+    /*
     if (short_SPL_dB > MIC_OVERLOAD_DB) {
       Leq_sum_sqr = INFINITY;
     } else if (isnan(short_SPL_dB) || (short_SPL_dB < MIC_NOISE_DB)) {
       Leq_sum_sqr = -INFINITY;
     }
+    */
 
     // Accumulate Leq sum
     Leq_sum_sqr += q.sum_sqr_weighted;
@@ -335,6 +335,10 @@ void setup() {
       Leq_dB = MIC_OFFSET_DB + MIC_REF_DB + 20 * log10(Leq_RMS / MIC_REF_AMPL);
       Leq_sum_sqr = 0;
       Leq_samples = 0;
+
+      // In case of acoustic overload or below noise floor measurement, report limit Leq value
+      if (Leq_dB > MIC_OVERLOAD_DB) Leq_dB = MIC_OVERLOAD_DB;
+      else if (Leq_dB < MIC_NOISE_DB) Leq_dB = MIC_NOISE_DB;
       
       // Serial output, customize (or remove) as needed
       if (USE_OLED == 0) Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS);
