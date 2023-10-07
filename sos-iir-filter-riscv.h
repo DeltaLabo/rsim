@@ -31,8 +31,8 @@ __asm__ (
   // float  a7 = gain;
   //
   ".text                    \n"
-  ".align  4                \n"
-  ".global sos_filter_f32   \n"
+  ".p2align  2              \n"
+  ".globl sos_filter_f32    \n"
   ".type   sos_filter_f32,@function\n"
   "sos_filter_f32:          \n"
   "  flw     f0, 0(a5)      \n" // float f0 = coeffs.b1;
@@ -83,8 +83,8 @@ __asm__ (
   // float  a7 = gain;
   //
   ".text                    \n"
-  ".align  4                \n"
-  ".global sos_filter_sum_sqr_f32 \n"
+  ".p2align  2              \n"
+  ".globl sos_filter_sum_sqr_f32 \n"
   ".type   sos_filter_sum_sqr_f32,@function \n"
   "sos_filter_sum_sqr_f32:  \n"
   "  flw     f0, 0(a5)      \n" // float f0 = coeffs.b1;
