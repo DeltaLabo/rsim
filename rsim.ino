@@ -1,18 +1,22 @@
 #include <driver/i2s.h>
-#include <SoftwareSerial.h>
 #include "slm_params.h"
 #include "sos-iir-filter-c.h"
+#include <U8x8lib.h>
+#include <Wire.h>
 
 //
 // Configuration
 //
 
-#define USE_SOFTWARE_SERIAL 0
+// OLED display toggle
+#define USE_OLED 1
 
-#define SOFT_TX_PIN D0
-#define SOFT_RX_PIN D1
-
-EspSoftwareSerial::UART softwareSerial;
+// U8x8 Contructor
+// The complete list is available here: https://github.com/olikraus/u8g2/wiki/u8x8setupcpp
+//- For SPI SSD1306 -
+//U8X8_SSD1306_128X64_NONAME_4W_HW_SPI u8x8(/* cs=/ U8X8_PIN_NONE, / dc=/ TFTspi_DC, / reset=*/ TFTspi_RST);
+//- For I2C SSD1306 -
+U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE); 
 
 // NOTE: Some microphones require at least DC-Blocker filter
 #define MIC_EQUALIZER     INMP441    // See below for defined IIR filters or set to 'None' to disable
@@ -255,6 +259,15 @@ void updateLEDColor(int Leq_dB){
   else digitalWrite(RED_LED_PIN, LOW);
 }
 
+void u8x8print(int Leq_dB){
+  u8x8.clear();
+  //u8x8.inverse();
+  u8x8.setFont(u8x8_font_px437wyse700b_2x2_r);
+  u8x8.setCursor(0,1);
+  //u8x8.printf("%.1f %s\n", Leq_dB, DB_UNITS);
+  u8x8.print(Leq_dB);
+  }
+
 //
 // Setup and main loop 
 //
@@ -267,19 +280,8 @@ void setup() {
   // i.e. if you want to (slightly) reduce ESP32 power consumption 
   setCpuFrequencyMhz(160); // It should run as low as 80MHz
 
-  if (USE_SOFTWARE_SERIAL == 0) Serial.begin(112500);
-  else{
-    softwareSerial.begin(9600, SWSERIAL_8N1, D9, D10, false);
-    if (!softwareSerial) { // If the object did not initialize, then its configuration is invalid
-      Serial.begin(112500);
-      Serial.println("Invalid EspSoftwareSerial pin configuration, check config");
-      while (1) { // Don't continue with invalid configuration
-        delay (1000);
-      }
-    } 
-  }
-
-  delay(1000); // Safety
+  if (USE_OLED == 1) u8x8.begin();
+  else Serial.begin(112500);
 
   if (USE_LED_INDICATOR == 1){
     // Initialize indicator LEDs
@@ -307,6 +309,8 @@ void setup() {
   double Leq_sum_sqr = 0;
   double Leq_dB = 0;
 
+  delay(1000); // Safety
+
   // Read sum of samples, calculated by 'i2s_reader_task'
   while (xQueueReceive(samples_queue, &q, portMAX_DELAY)) {
 
@@ -333,8 +337,8 @@ void setup() {
       Leq_samples = 0;
       
       // Serial output, customize (or remove) as needed
-      if (USE_SOFTWARE_SERIAL == 0) Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS);
-      else softwareSerial.printf("%.1f %s\n", Leq_dB, DB_UNITS);
+      if (USE_OLED == 0) Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS);
+      else u8x8print(Leq_dB);
 
       if (USE_LED_INDICATOR == 1) updateLEDColor(Leq_dB);
 
