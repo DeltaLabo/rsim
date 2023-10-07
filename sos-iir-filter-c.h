@@ -47,11 +47,13 @@ int sos_filter_f32(float *input, float *output, int len, const SOS_Coefficients 
   float f3 = coeffs.a2;
   float f4 = w.w0;
   float f5 = w.w1;
+  float f6, f7;
+
   for (; len>0; len--) { 
-    float f6 = *input++;
+    f6 = *input++;
     f6 += f2 * f4; // coeffs.a1 * w0
     f6 += f3 * f5; // coeffs.a2 * w1
-    float f7 = f6; // b0 assumed 1.0
+    f7 = f6; // b0 assumed 1.0
     f7 += f0 * f4; // coeffs.b1 * w0
     f7 += f1 * f5; // coeffs.b2 * w1 -> result
     *output++ = f7;
@@ -84,14 +86,16 @@ float sos_filter_sum_sqr_f32(float *input, float *output, int len, const SOS_Coe
   float f5 = w.w1;
   float f6 = gain;
   float sum_sqr = 0;
+  float f7, f8, f9;
+
   for (; len>0; len--) {
-    float f7 = *input++;
+    f7 = *input++;
     f7 += f2 * f4; // coeffs.a1 * w0
     f7 += f3 * f5; // coeffs.a2 * w1;
-    float f8 = f7; // b0 assumed 1.0
+    f8 = f7; // b0 assumed 1.0
     f8 += f0 * f4; // coeffs.b1 * w0;
     f8 += f1 * f5; // coeffs.b2 * w1; 
-    float f9 = f8 * f6;  // f8 * gain -> result
+    f9 = f8 * f6;  // f8 * gain -> result
     *output++ = f9;
     f5 = f4; // w1 = w0
     f4 = f7; // w0 = f7;
