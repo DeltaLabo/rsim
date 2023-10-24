@@ -259,8 +259,7 @@ void updateLEDColor(int Leq_dB){
 
 void u8x8print(int Leq_dB){
   u8x8.clear();
-  //u8x8.inverse();
-  u8x8.setFont(u8x8_font_px437wyse700b_2x2_r);
+  u8x8.setFont(u8x8_font_inr33_3x6_r);
   u8x8.setCursor(0,1);
   //u8x8.printf("%.1f %s\n", Leq_dB, DB_UNITS);
   u8x8.print(Leq_dB);
@@ -276,7 +275,7 @@ void setup() {
 
   // If needed, now you can actually lower the CPU frquency,
   // i.e. if you want to (slightly) reduce ESP32 power consumption 
-  setCpuFrequencyMhz(160); // It should run as low as 80MHz
+  setCpuFrequencyMhz(230);
 
   if (USE_OLED == 1) u8x8.begin();
   else Serial.begin(112500);
