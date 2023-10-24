@@ -1,6 +1,6 @@
 #include <driver/i2s.h>
 #include "slm_params.h"
-#include "sos-iir-filter-c.h"
+#include "sos-iir-filter-xtensa.h"
 #include <U8x8lib.h>
 #include <Wire.h>
 
