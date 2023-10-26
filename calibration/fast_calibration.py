@@ -4,6 +4,9 @@ import csv
 import numpy as np
 import sounddevice as sd
 import serial
+from ctypes import cast, POINTER
+from comtypes import CLSCTX_ALL
+from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 
 SLM_COM_PORT = "COMX"
 SLM_BAUDRATE = 115200
@@ -18,6 +21,15 @@ def receive_serial_data(data):
 
 # Function to play audio sine waves
 def play_audio_sine_wave():
+    # Get the default audio playback device
+    devices = AudioUtilities.GetSpeakers()
+    interface = devices.Activate(
+        IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+
+    # Create a volume control interface
+    volume_controller = cast(interface, POINTER(IAudioEndpointVolume))
+    volume_controller.SetMasterVolumeLevelScalar(volume, None)
+    
     duration = 10  # Duration of each sine wave in seconds
     sample_rate = 88200  # Sample rate in Hz
     t = np.arange(0, duration, 1 / sample_rate)
