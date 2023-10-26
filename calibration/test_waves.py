@@ -1,12 +1,4 @@
-linearity_test_waves = [
-    {
-        "duration": 10,
-        "frequency": 31.5,
-        "amplitude": 0.5
-    },
-    {
-        "duration": 10,
-        "frequency": 61.0,
-        "amplitude": 0.5
-    },
-]
+linearity_test_waves = {
+    "frequencies": (31.5,),
+    "volumes": (0.5,)
+}
