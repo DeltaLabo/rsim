@@ -9,7 +9,7 @@
 //
 
 // OLED display toggle
-#define USE_OLED 1
+#define USE_OLED 0
 
 // U8x8 Contructor
 // The complete list is available here: https://github.com/olikraus/u8g2/wiki/u8x8setupcpp
@@ -278,7 +278,7 @@ void setup() {
   setCpuFrequencyMhz(230);
 
   if (USE_OLED == 1) u8x8.begin();
-  else Serial.begin(112500);
+  else Serial.begin(115200);
 
   if (USE_LED_INDICATOR == 1){
     // Initialize indicator LEDs
