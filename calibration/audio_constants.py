@@ -8,21 +8,40 @@ iec61672_freqs = (
     14962.0, 15849.0, 16788.0, 17783.0, 18836.0, 19953.0 # Up to 20 kHz at 1/12-octave
 )
 
-ten_dB_spaced_volumes = (0.06, 0.13, 0.26, 0.51, 0.100) # 50 to 90 dB, in 10 dB intervals
-ambient_volumes = (0.13, 0.26, 0.51) # 60, 70, 80 dB
-ref_volume = 0.51 # 80 dB
+# Subset of most representative IEC 61672 frequencies
+representative_freqs = (
+    79.4, 125.9, 158.5, 199.5, 251.2, 631.0, 1000.0, 1995.3, 5011.9, 7943.3,
+    10000.0, 14962.0, 17783.0
+)
+
+ten_dB_spaced_volumes = (50, 60, 70, 80, 90) # 50 to 90 dB, in 10 dB intervals
+ambient_volumes = (60, 70, 80) # dB
+ref_volume = 80 # dB
+
+# Used to convert a dB value to the system volume level requiered to generate it
+dB_to_scalar = {
+    50: 0.06,
+    60: 0.13,
+    70: 0.26,
+    80: 0.51,
+    90: 0.100,
+    #TODO: Delete
+    5: 0.05,
+    6: 0.06,
+    7: 0.07
+}
 
 freq_response_waves = {
-    "frequencies": iec61672_freqs,
-    "volumes": ten_dB_spaced_volumes
+    "frequencies": representative_freqs,
+    "volumes": ambient_volumes
 }
 
 freq_sweep_waves = {
-    "frequencies": (1000, 2000, 3000),
-    "volumes": (0.03, 0.04, 0.05)
+    "frequencies": representative_freqs,
+    "volumes": ambient_volumes
 }
 
 freq_weighting_waves = {
-    "frequencies": iec61672_freqs,
-    "volumes": ten_dB_spaced_volumes
+    "frequencies": representative_freqs,
+    "volumes": ambient_volumes
 }
