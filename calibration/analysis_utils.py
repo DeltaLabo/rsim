@@ -173,5 +173,5 @@ def print_ambient_results(measurements, reference, TIME_PERIOD):
 def calculate_offset(measurements, reference):
     if len(measurements) != len(reference):
         raise ValueError("Both sets must have the same length")
-    offset = np.mean(measurements - reference)
+    offset = np.mean(reference - measurements)
     return offset
