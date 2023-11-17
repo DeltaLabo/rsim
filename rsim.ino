@@ -1,20 +1,25 @@
 #include <driver/i2s.h>
 #include "slm_params.h"
 #include "sos-iir-filter-xtensa.h"
-#include <U8x8lib.h>
-#include <Wire.h>
+
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEServer.h>
+#include <BLE2902.h>
+
+// BLE IDs
+#define SERVICE_UUID        "4d2b9a73-a822-487f-a846-3933abdcfcd9"
+#define CHARACTERISTIC_UUID "5d4bb853-b89f-48b8-9a38-4fd51ab116f7"
+
 
 //
 // Configuration
 //
 
-// OLED display toggle
-#define USE_OLED 0
-
-// U8x8 Contructor
-// The complete list is available here: https://github.com/olikraus/u8g2/wiki/u8x8setupcpp
-//- For I2C SSD1306 -
-U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE); 
+// Measurement display toggle
+#define BLE 0
+#define SERIAL 1
+#define LOG_MODE BLE
 
 // NOTE: Some microphones require at least DC-Blocker filter
 #define MIC_EQUALIZER     INMP441    // See below for defined IIR filters or set to 'None' to disable
@@ -42,14 +47,11 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 // LED indicator toggle
 #define USE_LED_INDICATOR 0
 
-// LED indicator pins
-#define RED_LED_PIN D4
-#define YELLOW_LED_PIN D6
-#define GREEN_LED_PIN D5
-
-
 // I2S peripheral to use (0 or 1)
 #define I2S_PORT          I2S_NUM_0
+
+// Variable to determine if there are any devices connected via BLE
+bool BLEDeviceConnected = false;
 
 //
 // IIR Filters
@@ -145,6 +147,19 @@ QueueHandle_t samples_queue;
 
 // Static buffer for block of samples
 float samples[SAMPLES_SHORT] __attribute__((aligned(4)));
+
+
+// BLE device connection / disconnection callbacks
+class ServerCallbacks: public BLEServerCallbacks {
+  void onConnect(BLEServer* pServer) {
+    BLEDeviceConnected = true;
+  };
+  
+  void onDisconnect(BLEServer* pServer) {
+    BLEDeviceConnected = false;
+  }
+};
+
 
 //
 // I2S Microphone sampling setup 
@@ -245,24 +260,16 @@ void mic_i2s_reader_task(void* parameter) {
 // Update the LED indicators depending on Leq value
 void updateLEDColor(int Leq_dB){
   // Turn all the LEDs off
-  digitalWrite(RED_LED_PIN, HIGH);
-  digitalWrite(YELLOW_LED_PIN, HIGH);
-  digitalWrite(GREEN_LED_PIN, HIGH);
+  digitalWrite(0, HIGH);
+  digitalWrite(1, HIGH);
+  digitalWrite(2, HIGH);
 
   // Turn the Green LED on if Leq is less than 50 dB
-  if (Leq_dB < 50) digitalWrite(GREEN_LED_PIN, LOW);
+  if (Leq_dB < 50) digitalWrite(0, LOW);
   // Turn the Yellow LED on if Leq is less than 70 dB
-  else if (Leq_dB < 75) digitalWrite(YELLOW_LED_PIN, LOW);
+  else if (Leq_dB < 75) digitalWrite(1, LOW);
   // Turn the Yellow LED on if Leq is greater than or equal to 70 dB
-  else digitalWrite(RED_LED_PIN, LOW);
-}
-
-void u8x8print(int Leq_dB){
-  u8x8.clear();
-  u8x8.setFont(u8x8_font_inr33_3x6_r);
-  u8x8.setCursor(0,1);
-  //u8x8.printf("%.1f %s\n", Leq_dB, DB_UNITS);
-  u8x8.print(Leq_dB);
+  else digitalWrite(2, LOW);
 }
 
 //
@@ -277,19 +284,7 @@ void setup() {
   // i.e. if you want to (slightly) reduce ESP32 power consumption 
   setCpuFrequencyMhz(230);
 
-  if (USE_OLED == 1) u8x8.begin();
-  else Serial.begin(115200);
-
-  if (USE_LED_INDICATOR == 1){
-    // Initialize indicator LEDs
-    pinMode(RED_LED_PIN, OUTPUT);
-    pinMode(YELLOW_LED_PIN, OUTPUT);
-    pinMode(GREEN_LED_PIN, OUTPUT);
-    // The LEDs are driven by negative logic
-    digitalWrite(RED_LED_PIN, HIGH);
-    digitalWrite(YELLOW_LED_PIN, HIGH);
-    digitalWrite(GREEN_LED_PIN, HIGH);
-  }
+  if (LOG_MODE == SERIAL) Serial.begin(115200);
 
   // Create FreeRTOS queue
   samples_queue = xQueueCreate(8, sizeof(sum_queue_t));
@@ -300,11 +295,35 @@ void setup() {
   //       (due to using the hardware FPU instructions).
   //       For manual control see: xTaskCreatePinnedToCore
   xTaskCreate(mic_i2s_reader_task, "Mic I2S Reader", I2S_TASK_STACK, NULL, I2S_TASK_PRI, NULL);
+  
+  // Create Bluetooth device
+  BLEDevice::init("RSIM");
+  BLEServer *pServer = BLEDevice::createServer();
+  // Create Bluetooth characteristic
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+  pServer->setCallbacks(new ServerCallbacks());
+  BLECharacteristic *pCharacteristic = pService->createCharacteristic(
+                                        CHARACTERISTIC_UUID,
+                                        BLECharacteristic::PROPERTY_NOTIFY
+                                      );
+  pCharacteristic->addDescriptor(new BLE2902());
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(pService->getUUID());
+  pAdvertising->setScanResponse(true);
+  pAdvertising->setMinPreferred(0x0);
+  pAdvertising->setMinPreferred(0x1F);
+
+  if (LOG_MODE == BLE)
+  {
+    pService->start();
+    BLEDevice::startAdvertising();
+  }
 
   sum_queue_t q;
   uint32_t Leq_samples = 0;
   double Leq_sum_sqr = 0;
   double Leq_dB = 0;
+  char Leq_dB_str[9];
 
   delay(1000); // Safety
 
@@ -340,8 +359,12 @@ void setup() {
       else if (Leq_dB < MIC_NOISE_DB) Leq_dB = MIC_NOISE_DB;
       
       // Serial output, customize (or remove) as needed
-      if (USE_OLED == 0) Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS);
-      else u8x8print(Leq_dB);
+      if (LOG_MODE == SERIAL) Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS);
+      else if ((LOG_MODE == BLE) && BLEDeviceConnected == true) {
+        sprintf(Leq_dB_str, "%.1f %s\n", Leq_dB, DB_UNITS);
+        pCharacteristic->setValue(Leq_dB_str);
+        pCharacteristic->notify();
+      }
 
       if (USE_LED_INDICATOR == 1) updateLEDColor(Leq_dB);
 
