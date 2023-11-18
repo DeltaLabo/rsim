@@ -7,7 +7,6 @@
 BLEClient*  pClient;
 bool doconnect = false;
 
-//BLE Server name (the other ESP32 name running the server sketch)
 #define bleServerName "RSIM"
 
 //Address of the peripheral device. Address will be found during scanning...
@@ -16,7 +15,7 @@ static BLEAddress *pServerAddress;
 BLEUUID serviceUUID("4d2b9a73-a822-487f-a846-3933abdcfcd9");
 BLEUUID charUUID("5d4bb853-b89f-48b8-9a38-4fd51ab116f7");
 
-char Leq_dB_str[9];
+char* Leq_dB_str;
 
 //Callback function that gets called, when another device's advertisement has been received
 class AdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
@@ -30,6 +29,7 @@ class AdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
 };
 
 void setup() {
+  setCpuFrequencyMhz(120);
   Serial.begin(115200);
   
   Serial.println("Starting BLE client...");
@@ -42,7 +42,7 @@ void setup() {
   BLEScan* pBLEScan = BLEDevice::getScan();
   pBLEScan->setAdvertisedDeviceCallbacks(new AdvertisedDeviceCallbacks());
   pBLEScan->setActiveScan(true);
-  pBLEScan->start(30);
+  pBLEScan->start(60); // Run scan for 30 seconds
 
   pClient = BLEDevice::createClient();
   // Connect to the remove BLE Server.
@@ -77,9 +77,9 @@ void loop() {
     BLERemoteService* pRemoteService = pClient->getService(serviceUUID);
     BLERemoteCharacteristic* pCharacteristic = pRemoteService->getCharacteristic(charUUID);
     pCharacteristic->registerForNotify([](BLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify) {
-      Serial.println(*pData);
+      Leq_dB_str = (char*)pData;
+      Serial.println(Leq_dB_str);
     });
   }
-  printReadings();
-  delay(10);
+  delay(90);
 }
