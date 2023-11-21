@@ -264,11 +264,11 @@ void mic_i2s_reader_task(void* parameter) {
 // Update the LED indicators depending on Leq value
 void updateLEDColor(float Leq_dB){
   // Turn the Green LED on if Leq is less than 50 dB
-  if (Leq_dB < 55.0) {
+  if (Leq_dB < GREEN_UPPER_LIMIT) {
     led.setColor(0, 255, 0); // Verde
   }
   // Turn the Yellow LED on if Leq is less than 70 dB
-  else if (Leq_dB < 75.0) {
+  else if (Leq_dB < YELLOW_UPPER_LIMIT) {
     led.setColor(255, 255, 0); // Amarillo
   }
   // Turn the Red LED on if Leq is greater than or equal to 70 dB

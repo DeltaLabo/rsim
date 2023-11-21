@@ -4,6 +4,9 @@
 #ifndef PARAMS_H
 #define PARAMS_H
 
+#define GREEN_UPPER_LIMIT 55.0
+#define YELLOW_UPPER_LIMIT 75.0
+
 #define LEQ_PERIOD        1.0       // second(s)
 #define WEIGHTING         A_weighting // 'A_weighting' 'C_weighting' or 'None' (Z_weighting)
 #define LEQ_UNITS         "LAeq"      // customize based on above weighting used
