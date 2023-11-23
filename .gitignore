@@ -54,3 +54,4 @@ dkms.conf
 .venv/
 __pycache__/
 results/
+autonomy_test*.csv
