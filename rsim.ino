@@ -1,26 +1,26 @@
+#include <WiFi.h>
+#include <ThingSpeak.h>
+#include <Arduino.h>
+#include <cstring>
+#include "LEDStripDriver.h"
+
 #include <driver/i2s.h>
 #include "slm_params.h"
 #include "sos-iir-filter-xtensa.h"
 
-#include <BLEDevice.h>
-#include <BLEUtils.h>
-#include <BLEServer.h>
-#include <BLE2902.h>
-#include "LEDStripDriver.h"
-
-// BLE IDs
-#define SERVICE_UUID        "4d2b9a73-a822-487f-a846-3933abdcfcd9"
-#define CHARACTERISTIC_UUID "5d4bb853-b89f-48b8-9a38-4fd51ab116f7"
-
+#define WIFI_SSID "LaboratorioDelta"
+#define WIFI_PASSWORD "labdelta21!"
+#define WRITE_API_KEY "7MF9B7PO9N1OF3HF"
+#define CHANNEL_NUMBER 2354933
 
 //
 // Configuration
 //
 
 // Measurement display toggle
-#define BLE 0
+#define WIFI 0
 #define SERIAL 1
-#define LOG_MODE SERIAL
+#define LOG_MODE WIFI
 
 // NOTE: Some microphones require at least DC-Blocker filter
 #define MIC_EQUALIZER     INMP441    // See below for defined IIR filters or set to 'None' to disable
@@ -51,11 +51,12 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 // I2S peripheral to use (0 or 1)
 #define I2S_PORT          I2S_NUM_0
 
-// DIN=GPIO6 CIN=GPIO7 
+// DIN=GPIO6 (Pin 5) CIN=GPIO7  (Pin 6)
 LEDStripDriver led = LEDStripDriver(5, 6);
 
-// Variable to determine if there are any devices connected via BLE
-bool BLEDeviceConnected = false;
+WiFiClient  client;
+
+int thingSpeakErrorCode;
 
 //
 // IIR Filters
@@ -151,18 +152,6 @@ QueueHandle_t samples_queue;
 
 // Static buffer for block of samples
 float samples[SAMPLES_SHORT] __attribute__((aligned(4)));
-
-
-// BLE device connection / disconnection callbacks
-class ServerCallbacks: public BLEServerCallbacks {
-  void onConnect(BLEServer* pServer) {
-    BLEDeviceConnected = true;
-  };
-  
-  void onDisconnect(BLEServer* pServer) {
-    BLEDeviceConnected = false;
-  }
-};
 
 
 //
@@ -300,33 +289,17 @@ void setup() {
   xTaskCreate(mic_i2s_reader_task, "Mic I2S Reader", I2S_TASK_STACK, NULL, I2S_TASK_PRI, NULL);
 
   if (LOG_MODE == SERIAL) Serial.begin(115200);
-  if (LOG_MODE == BLE)
+  if (LOG_MODE == WIFI)
   {
-    // Create Bluetooth device
-    BLEDevice::init("RSIM");
-    BLEServer *pServer = BLEDevice::createServer();
-    // Create Bluetooth characteristic
-    BLEService *pService = pServer->createService(SERVICE_UUID);
-    pServer->setCallbacks(new ServerCallbacks());
-    BLECharacteristic *pCharacteristic = pService->createCharacteristic(
-                                          CHARACTERISTIC_UUID,
-                                          BLECharacteristic::PROPERTY_NOTIFY
-                                        );
-    pCharacteristic->addDescriptor(new BLE2902());
-    BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-    pAdvertising->addServiceUUID(pService->getUUID());
-    pAdvertising->setScanResponse(true);
-    pAdvertising->setMinPreferred(0x0);
-    pAdvertising->setMinPreferred(0x1F);
-    pService->start();
-    BLEDevice::startAdvertising();
+    Serial.begin(115200); // TODO: delete
+    WiFi.mode(WIFI_STA);   
+    ThingSpeak.begin(client);
   }
 
   sum_queue_t q;
   uint32_t Leq_samples = 0;
   double Leq_sum_sqr = 0;
   double Leq_dB = 0;
-  char Leq_dB_str[9];
 
   delay(1000); // Safety
 
@@ -363,11 +336,31 @@ void setup() {
       
       // Serial output, customize (or remove) as needed
       if (LOG_MODE == SERIAL) Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS);
-      else if (LOG_MODE == BLE) {
-        sprintf(Leq_dB_str, "%.1f %s\n", Leq_dB, DB_UNITS);
-        if (BLEDeviceConnected == true) {  
-          //pCharacteristic->setValue(Leq_dB_str);
-          //pCharacteristic->notify();
+      else if (LOG_MODE == WIFI) {
+        Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS); // TODO: delete
+
+        // Connect or reconnect to WiFi
+        if(WiFi.status() != WL_CONNECTED){
+          Serial.print("Attempting to connect to WIFI...");
+          WiFi.begin(WIFI_SSID, WIFI_PASSWORD); 
+          delay(100); 
+          if (WiFi.status() != WL_CONNECTED){
+            Serial.println(" Couldn't connect.");
+          }
+          else Serial.println(" Connected.");
+        }
+
+        if (WiFi.status() == WL_CONNECTED){
+          // Write to ThingSpeak.
+          // Params: Channel ID, Field Number, Value, Write API key
+          thingSpeakErrorCode = ThingSpeak.writeField(CHANNEL_NUMBER, 1, float(Leq_dB), WRITE_API_KEY);
+
+          if(thingSpeakErrorCode == 200){
+            Serial.println("Channel update successful.");
+          }
+          else{
+            Serial.println("Problem updating channel. HTTP error code " + String(thingSpeakErrorCode));
+          }
         }
       }
 
