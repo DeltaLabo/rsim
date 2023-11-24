@@ -338,12 +338,13 @@ void setup() {
       if (LOG_MODE == SERIAL) Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS);
       else if (LOG_MODE == WIFI) {
         Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS); // TODO: delete
+        if (USE_LED_INDICATOR == 1) updateLEDColor(Leq_dB);
 
         // Connect or reconnect to WiFi
         if(WiFi.status() != WL_CONNECTED){
           Serial.print("Attempting to connect to WIFI...");
           WiFi.begin(WIFI_SSID, WIFI_PASSWORD); 
-          delay(100); 
+          delay(5000);
           if (WiFi.status() != WL_CONNECTED){
             Serial.println(" Couldn't connect.");
           }
@@ -355,6 +356,20 @@ void setup() {
           // Params: Channel ID, Field Number, Value, Write API key
           thingSpeakErrorCode = ThingSpeak.writeField(CHANNEL_NUMBER, 1, float(Leq_dB), WRITE_API_KEY);
 
+          /*
+          Possible response codes:
+          200 - OK / Success
+          404 - Incorrect API key (or invalid ThingSpeak server address)
+          -101 - Value is out of range or string is too long (> 255 characters)
+          -201 - Invalid field number specified
+          -210 - setField() was not called before writeFields()
+          -301 - Failed to connect to ThingSpeak
+          -302 -  Unexpected failure during write to ThingSpeak
+          -303 - Unable to parse response
+          -304 - Timeout waiting for server to respond
+          -401 - Point was not inserted (most probable cause is exceeding the rate limit)
+          */
+
           if(thingSpeakErrorCode == 200){
             Serial.println("Channel update successful.");
           }
@@ -363,8 +378,6 @@ void setup() {
           }
         }
       }
-
-      if (USE_LED_INDICATOR == 1) updateLEDColor(Leq_dB);
 
       // Debug only
       //Serial.printf("%u processing ticks\n", q.proc_ticks);
