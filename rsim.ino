@@ -20,6 +20,7 @@
 // Measurement display toggle
 #define WIFI 0
 #define SERIAL 1
+#define WIFI_PLUS_SERIAL 2
 #define LOG_MODE WIFI
 
 // NOTE: Some microphones require at least DC-Blocker filter
@@ -273,23 +274,20 @@ void updateLEDColor(float Leq_dB){
 //       the task to whichever core it happens to run on at the moment
 // 
 void setup() {
-
-  // If needed, now you can actually lower the CPU frquency,
-  // i.e. if you want to (slightly) reduce ESP32 power consumption 
   setCpuFrequencyMhz(230);
 
   // Create FreeRTOS queue
   samples_queue = xQueueCreate(8, sizeof(sum_queue_t));
   
-  // Create the I2S reader FreeRTOS task
-  // NOTE: Current version of ESP-IDF will pin the task 
-  //       automatically to the first core it happens to run on
-  //       (due to using the hardware FPU instructions).
-  //       For manual control see: xTaskCreatePinnedToCore
-  xTaskCreate(mic_i2s_reader_task, "Mic I2S Reader", I2S_TASK_STACK, NULL, I2S_TASK_PRI, NULL);
+  // Create the mic reader task and pin it to the second core (ID=1)
+  xTaskCreatePinnedToCore(mic_i2s_reader_task, "Mic I2S Reader", I2S_TASK_STACK, NULL, I2S_TASK_PRI, NULL, 1);
 
   if (LOG_MODE == SERIAL) Serial.begin(115200);
-  if (LOG_MODE == WIFI)
+  else if (LOG_MODE == WIFI) {
+    WiFi.mode(WIFI_STA);   
+    ThingSpeak.begin(client);
+  }
+  else if (LOG_MODE == WIFI_PLUS_SERIAL)
   {
     Serial.begin(115200); // TODO: delete
     WiFi.mode(WIFI_STA);   
@@ -337,6 +335,46 @@ void setup() {
       // Serial output, customize (or remove) as needed
       if (LOG_MODE == SERIAL) Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS);
       else if (LOG_MODE == WIFI) {
+        if (USE_LED_INDICATOR == 1) updateLEDColor(Leq_dB);
+        // Connect or reconnect to WiFi
+        if(WiFi.status() != WL_CONNECTED){
+          Serial.print("Attempting to connect to WIFI...");
+          WiFi.begin(WIFI_SSID, WIFI_PASSWORD); 
+          vTaskDelay(pdMS_TO_TICKS(5000)); // 5000 ms
+          if (WiFi.status() != WL_CONNECTED){
+            Serial.println(" Couldn't connect.");
+          }
+          else Serial.println(" Connected.");
+        }
+
+        if (WiFi.status() == WL_CONNECTED){
+          // Write to ThingSpeak.
+          // Params: Channel ID, Field Number, Value, Write API key
+          thingSpeakErrorCode = ThingSpeak.writeField(CHANNEL_NUMBER, 1, float(Leq_dB), WRITE_API_KEY);
+
+          /*
+          Possible response codes:
+          200 - OK / Success
+          404 - Incorrect API key (or invalid ThingSpeak server address)
+          -101 - Value is out of range or string is too long (> 255 characters)
+          -201 - Invalid field number specified
+          -210 - setField() was not called before writeFields()
+          -301 - Failed to connect to ThingSpeak
+          -302 -  Unexpected failure during write to ThingSpeak
+          -303 - Unable to parse response
+          -304 - Timeout waiting for server to respond
+          -401 - Point was not inserted (most probable cause is exceeding the rate limit)
+          */
+
+          if(thingSpeakErrorCode == 200){
+            Serial.println("Channel update successful.");
+          }
+          else{
+            Serial.println("Problem updating channel. HTTP error code " + String(thingSpeakErrorCode));
+          }
+        }      
+      }
+      else if (LOG_MODE == WIFI_PLUS_SERIAL) {
         Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS); // TODO: delete
         if (USE_LED_INDICATOR == 1) updateLEDColor(Leq_dB);
 
@@ -344,7 +382,7 @@ void setup() {
         if(WiFi.status() != WL_CONNECTED){
           Serial.print("Attempting to connect to WIFI...");
           WiFi.begin(WIFI_SSID, WIFI_PASSWORD); 
-          delay(5000);
+          vTaskDelay(pdMS_TO_TICKS(5000)); // 5000 ms
           if (WiFi.status() != WL_CONNECTED){
             Serial.println(" Couldn't connect.");
           }
