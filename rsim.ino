@@ -57,6 +57,12 @@ LEDStripDriver led = LEDStripDriver(5, 6);
 
 WiFiClient  client;
 
+#define GREEN 0
+#define YELLOW 1
+#define RED 2
+short currentColor = -1;
+bool switchFlag = false;
+
 int thingSpeakErrorCode;
 
 //
@@ -253,17 +259,82 @@ void mic_i2s_reader_task(void* parameter) {
 
 // Update the LED indicators depending on Leq value
 void updateLEDColor(float Leq_dB){
-  // Turn the Green LED on if Leq is less than 50 dB
-  if (Leq_dB < GREEN_UPPER_LIMIT) {
-    led.setColor(0, 255, 0); // Verde
+  if (currentColor == -1) {
+    switchFlag = false;
+    // Turn the Green LED on if Leq is less than 50 dB
+    if (Leq_dB < GREEN_UPPER_LIMIT) {
+      led.setColor(0, 255, 0); // Verde
+      currentColor = GREEN;
+    }
+    // Turn the Yellow LED on if Leq is less than 70 dB
+    else if (Leq_dB < YELLOW_UPPER_LIMIT) {
+      led.setColor(255, 255, 0); // Amarillo
+      currentColor = YELLOW;
+    }
+    // Turn the Red LED on if Leq is greater than or equal to 70 dB
+    else {
+      led.setColor(255, 0, 0); // Rojo
+      currentColor = RED;
+    }
   }
-  // Turn the Yellow LED on if Leq is less than 70 dB
-  else if (Leq_dB < YELLOW_UPPER_LIMIT) {
-    led.setColor(255, 255, 0); // Amarillo
+  else if (currentColor == GREEN) {
+    if (Leq_dB < GREEN_UPPER_LIMIT) {
+      switchFlag = false;
+    }
+    // Turn the Yellow LED on if Leq is up to 70 dB
+    else if (Leq_dB >= GREEN_UPPER_LIMIT && (Leq_dB < YELLOW_UPPER_LIMIT) && switchFlag == true) {
+      led.setColor(255, 255, 0); // Amarillo
+      currentColor = YELLOW;
+      switchFlag = false;
+    }
+    else if (Leq_dB >= GREEN_UPPER_LIMIT && (Leq_dB < YELLOW_UPPER_LIMIT && switchFlag == false)) {
+      switchFlag = true;
+    }
+    // Turn the Red LED on if Leq is greater than or equal to 70 dB
+    else if (Leq_dB >= YELLOW_UPPER_LIMIT && switchFlag == true) {
+      led.setColor(255, 0, 0); // Rojo
+      currentColor = RED;
+      switchFlag = false;
+    }
+    else if (Leq_dB >= YELLOW_UPPER_LIMIT && switchFlag == false) {
+      switchFlag = true;
+    }
   }
-  // Turn the Red LED on if Leq is greater than or equal to 70 dB
-  else {
-    led.setColor(255, 0, 0); // Rojo
+  else if (currentColor == YELLOW) {
+    // Turn the Green LED on if Leq is less than 50 dB
+    if (Leq_dB < GREEN_UPPER_LIMIT) {
+      led.setColor(0, 255, 0); // Verde
+      currentColor = GREEN;
+      switchFlag = true;
+    }
+    else if (Leq_dB < YELLOW_UPPER_LIMIT) {
+      switchFlag = true;
+    }
+    else if (switchFlag == true) {
+      led.setColor(255, 0, 0); // Rojo
+      currentColor = RED;
+    }
+    else {
+      switchFlag = true;
+    }
+  }
+  else if (currentColor == RED) {
+    switchFlag = true;
+    // Turn the Green LED on if Leq is less than 50 dB
+    if (Leq_dB < GREEN_UPPER_LIMIT) {
+      led.setColor(0, 255, 0); // Verde
+      currentColor = GREEN;
+    }
+    // Turn the Yellow LED on if Leq is less than 70 dB
+    else if (Leq_dB < YELLOW_UPPER_LIMIT) {
+      led.setColor(255, 255, 0); // Amarillo
+      currentColor = YELLOW;
+    }
+    // Turn the Red LED on if Leq is greater than or equal to 70 dB
+    else {
+      led.setColor(255, 0, 0); // Rojo
+      currentColor = RED;
+    }
   }
 }
 

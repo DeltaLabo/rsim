@@ -7,7 +7,7 @@
 #define GREEN_UPPER_LIMIT 67.0
 #define YELLOW_UPPER_LIMIT 77.0
 
-#define LEQ_PERIOD        16.0      // second(s)
+#define LEQ_PERIOD        8.0      // second(s)
 #define WEIGHTING         A_weighting // 'A_weighting' 'C_weighting' or 'None' (Z_weighting)
 #define LEQ_UNITS         "LAeq"      // customize based on above weighting used
 #define DB_UNITS          "dBA"       // customize based on above weighting used
