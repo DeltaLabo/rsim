@@ -12,12 +12,10 @@ class DataContainer(dict):
 
         self.frequencies = OrderedSet()
         self.volumes = OrderedSet()
-        self["all"] = np.array([])
 
         for freq in test_waves["frequencies"]:
             self.frequencies.add(freq)
             self[freq] = {}
-            self[freq]["freq_all"] = np.array([])
 
             for volume in test_waves["volumes"]:
                 self.volumes.add(volume)
@@ -27,12 +25,18 @@ class DataContainer(dict):
 def plot_time_progression(measurements, reference, units, title, TIME_PERIOD):
     try:
         for freq in measurements.frequencies:
+            measurements_freq_all = np.array([])
+            reference_freq_all = np.array([])
+            for volume in measurements.volumes:
+                measurements_freq_all = np.append(measurements_freq_all, measurements[freq][volume])
+                reference_freq_all = np.append(reference_freq_all, reference[freq][volume])
+
             # Create x-axis values
-            x_axis = [x * TIME_PERIOD for x in range(len(measurements[freq]["freq_all"]))]
+            x_axis = [x * TIME_PERIOD for x in range(len(measurements_freq_all))]
 
             # Create a plot
-            plt.plot(x_axis, measurements[freq]["freq_all"], label="ESP")
-            plt.plot(x_axis, reference[freq]["freq_all"], label="SLM")
+            plt.plot(x_axis, measurements_freq_all, label="ESP")
+            plt.plot(x_axis, reference_freq_all, label="SLM")
 
             # Add labels and a title (optional)
             plt.xlabel("s")
@@ -40,6 +44,7 @@ def plot_time_progression(measurements, reference, units, title, TIME_PERIOD):
             plt.title(f"Nivel de sonido con respecto al tiempo @ {freq} Hz" + title)
             plt.legend()
 
+            plt.tight_layout()  # Adjust layout for better spacing
             # Show the plot
             plt.show()
     except AttributeError:
@@ -59,6 +64,7 @@ def plot_time_progression(measurements, reference, units, title, TIME_PERIOD):
         plt.ylabel(units)
         plt.title(f"Nivel de sonido con respecto al tiempo" + title)
 
+        plt.tight_layout()  # Adjust layout for better spacing
         # Show the plot
         plt.show()
 
@@ -128,6 +134,9 @@ def plot_ref_gain(measurements, reference, ref_volume, units, title):
     plt.ylabel(f"Gain ({units})")
     plt.title(title)
 
+    plt.xscale("log")
+    plt.xticks([100.0, 251.2, 631.0, 1000.0, 5011.9, 10000.0, 14962.0, 17783.0], ["100", "251", "631", "1k", "5k", "10k", "15k", "18k"])
+    plt.tight_layout()  # Adjust layout for better spacing
     # Show the plot
     plt.show()
 
@@ -154,6 +163,9 @@ def plot_ref_mae_rmse(measurements, reference, ref_volume, units, title):
     plt.title(title)
     plt.legend()
 
+    plt.xscale("log")
+    plt.xticks([100.0, 251.2, 631.0, 1000.0, 5011.9, 10000.0, 14962.0, 17783.0], ["100", "251", "631", "1k", "5k", "10k", "15k", "18k"])
+    plt.tight_layout()  # Adjust layout for better spacing
     # Show the plot
     plt.show()
 
@@ -163,11 +175,11 @@ def calculate_stdev(measurements):
 
 # Plot and print the results of the ambient noise test
 def plot_ambient_results(measurements, reference, TIME_PERIOD):
-    for volume in ambient_volumes:
+    for volume in (70, 80):
         plot_time_progression(measurements[volume], reference[volume], "dBA", f" @ {volume} dB, T={'F' if TIME_PERIOD == 0.125 else 'S'}", TIME_PERIOD)
 
 def print_ambient_results(measurements, reference, TIME_PERIOD):
-    for volume in ambient_volumes:
+    for volume in (70, 80):
         print(f"Volumen: {volume} dB, MAE: {calculate_mae(measurements[volume], reference[volume])} dBA, RMSE: {calculate_rmse(measurements[volume], reference[volume])} dBA")
 
 def calculate_offset(measurements, reference):
