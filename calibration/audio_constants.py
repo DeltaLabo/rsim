@@ -10,7 +10,7 @@ iec61672_freqs = (
 
 # Subset of most representative IEC 61672 frequencies
 representative_freqs = (
-    79.4, 125.9, 158.5, 199.5, 251.2, 631.0, 1000.0, 1995.3, 5011.9, 7943.3,
+    100.0, 251.2, 631.0, 1000.0, 5011.9,
     10000.0, 14962.0, 17783.0
 )
 
@@ -25,10 +25,6 @@ dB_to_scalar = {
     70: 0.26,
     80: 0.40,
     90: 0.100,
-    #TODO: Delete
-    5: 0.05,
-    6: 0.06,
-    7: 0.07
 }
 
 freq_response_waves = {
