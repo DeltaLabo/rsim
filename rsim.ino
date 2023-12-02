@@ -3,28 +3,32 @@
 #include <Arduino.h>
 #include <cstring>
 #include "LEDStripDriver.h"
+#include <HardwareSerial.h>
 
 #include <driver/i2s.h>
 #include "slm_params.h"
 #include "sos-iir-filter-xtensa.h"
 
+// WiFi parameters
 #define WIFI_SSID "LaboratorioDelta"
 #define WIFI_PASSWORD "labdelta21!"
-#define WRITE_API_KEY "7MF9B7PO9N1OF3HF"
-#define CHANNEL_NUMBER 2354933
+// ThingSpeak parameters
+#define WRITE_API_KEY "CLXSWMD66IFK7PO4"
+#define CHANNEL_NUMBER 2363548
 
 //
 // Configuration
 //
 
-// Measurement display toggle
+// Select how to log measurements
+// WiFi means ThingSpeak logging
 #define WIFI 0
 #define SERIAL 1
 #define WIFI_PLUS_SERIAL 2
-#define LOG_MODE WIFI
+#define LOG_MODE WIFI_PLUS_SERIAL
 
-// NOTE: Some microphones require at least DC-Blocker filter
-#define MIC_EQUALIZER     INMP441    // See below for defined IIR filters or set to 'None' to disable
+// Equalizer used to flatten the microphone's frequency response
+#define MIC_EQUALIZER     INMP441
 
 // Customize these values from microphone datasheet
 #define MIC_SENSITIVITY   -26         // dBFS value expected at MIC_REF_DB (Sensitivity value from datasheet)
@@ -55,16 +59,26 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 // DIN=GPIO6 (Pin 5) CIN=GPIO7  (Pin 6)
 LEDStripDriver led = LEDStripDriver(5, 6);
 
+// WiFi client used for ThingSpeak logging
 WiFiClient  client;
+
+// Hardware Serial is selected to avoid using the USB-C port while the ESP is running on battery power, which can cause electrical problems
+HardwareSerial hwSerial(0);
 
 #define GREEN 0
 #define YELLOW 1
 #define RED 2
+
+// Color that the indicator is currently showing, -1 is the initial value
 short currentColor = -1;
+// Flag to determine when to switch colors up (i.e. from green to yellow/red or from yellow to red)
 bool switchFlag = false;
 
+// Flag to determine when to log measurements
+// Works as a counter of how many SLM periods have passed from the last logging event
 short logFlag = 0;
 
+// Variable to store the ThingSpeak error code returned after sending data
 int thingSpeakErrorCode;
 
 //
@@ -81,7 +95,7 @@ SOS_IIR_Filter DC_BLOCKER = {
 
 // 
 // Equalizer IIR filters to flatten microphone frequency response
-// See respective .m file for filter design. Fs = 48Khz.
+// Fs = 48Khz.
 //
 // Filters are represented as Second-Order Sections cascade with assumption
 // that b0 and a0 are equal to 1.0 and 'gain' is applied at the last step 
@@ -142,7 +156,7 @@ SOS_IIR_Filter C_weighting = {
 //
 #define SAMPLE_RATE       48000 // Hz, fixed to design of IIR filters
 #define SAMPLE_BITS       32    // bits
-#define SAMPLE_T          int32_t 
+#define SAMPLE_T          int32_t // Sample data type, 32 bits to accommodate the incoming 24-bit samples
 #define SAMPLES_SHORT     (SAMPLE_RATE / 8) // ~125ms
 #define SAMPLES_LEQ       (SAMPLE_RATE * LEQ_PERIOD)
 #define DMA_BANK_SIZE     (SAMPLES_SHORT / 16)
@@ -246,12 +260,8 @@ void mic_i2s_reader_task(void* parameter) {
     // writes filtered samples back to the same buffer.
     q.sum_sqr_SPL = MIC_EQUALIZER.filter(samples, samples, SAMPLES_SHORT);
 
-    // Apply weighting and calucate weigthed sum of squares
+    // Apply weighting and calculate weigthed sum of squares
     q.sum_sqr_weighted = WEIGHTING.filter(samples, samples, SAMPLES_SHORT);
-
-
-    // Debug only. Ticks we spent filtering and summing block of I2S data
-    q.proc_ticks = xTaskGetTickCount() - start_tick;
 
     // Send the sums to FreeRTOS queue where main task will pick them up
     // and further calcualte decibel values (division, logarithms, etc...)
@@ -261,44 +271,54 @@ void mic_i2s_reader_task(void* parameter) {
 
 // Update the LED indicators depending on Leq value
 void updateLEDColor(float Leq_dB){
+  // If the indicator is just starting up (no previous measurements are available)
   if (currentColor == -1) {
+    // Wait for 2 periods before switching colors up (only applicable once currentColor == GREEN | YELLOW | RED)
     switchFlag = false;
-    // Turn the Green LED on if Leq is less than 50 dB
+    // Turn the Green LED on if Leq is less than the limit
     if (Leq_dB < GREEN_UPPER_LIMIT) {
-      led.setColor(0, 255, 0); // Verde
+      led.setColor(0, 255, 0); // RGB Green
       currentColor = GREEN;
     }
-    // Turn the Yellow LED on if Leq is less than 70 dB
+    // Turn the Yellow LED on if Leq is less than the limit
     else if (Leq_dB < YELLOW_UPPER_LIMIT) {
-      led.setColor(255, 255, 0); // Amarillo
+      led.setColor(255, 255, 0); // RGB Yellow
       currentColor = YELLOW;
     }
-    // Turn the Red LED on if Leq is greater than or equal to 70 dB
+    // Turn the Red LED on if Leq is greater than both limits
     else {
-      led.setColor(255, 0, 0); // Rojo
+      led.setColor(255, 0, 0); // RGB Red
       currentColor = RED;
     }
   }
   else if (currentColor == GREEN) {
+    // If the color is within the Green range, don't update the color
     if (Leq_dB < GREEN_UPPER_LIMIT) {
+      // Wait for 2 periods before switching colors up
       switchFlag = false;
     }
-    // Turn the Yellow LED on if Leq is up to 70 dB
+    // Turn the Yellow LED on if Leq has been within the Yellow range for 2 periods
     else if (Leq_dB >= GREEN_UPPER_LIMIT && (Leq_dB < YELLOW_UPPER_LIMIT) && switchFlag == true) {
-      led.setColor(255, 255, 0); // Amarillo
+      led.setColor(255, 255, 0); // Yellow
       currentColor = YELLOW;
+      // Wait for 2 periods before switching colors up again
       switchFlag = false;
     }
+    // If Leq is within the Yellow within but only one period has passed
     else if (Leq_dB >= GREEN_UPPER_LIMIT && (Leq_dB < YELLOW_UPPER_LIMIT && switchFlag == false)) {
+      // Enable the switch flag so the indicator changes colors next time Leq is outside the Green range
       switchFlag = true;
     }
-    // Turn the Red LED on if Leq is greater than or equal to 70 dB
+    // Turn the Red LED on if Leq has been within the Red range for 2 periods
     else if (Leq_dB >= YELLOW_UPPER_LIMIT && switchFlag == true) {
-      led.setColor(255, 0, 0); // Rojo
+      led.setColor(255, 0, 0); // Red
       currentColor = RED;
+      // Wait for 2 periods before switching colors up again
       switchFlag = false;
     }
+    // If Leq is within the Yellow within but only one period has passed
     else if (Leq_dB >= YELLOW_UPPER_LIMIT && switchFlag == false) {
+      // Enable the switch flag so the indicator changes colors next time Leq is outside the Green range
       switchFlag = true;
     }
   }
@@ -307,6 +327,7 @@ void updateLEDColor(float Leq_dB){
     if (Leq_dB < GREEN_UPPER_LIMIT) {
       led.setColor(0, 255, 0); // Verde
       currentColor = GREEN;
+      // Enable the switch flag so the indicator changes colors next time Leq is outside the Green range
       switchFlag = true;
     }
     else if (Leq_dB < YELLOW_UPPER_LIMIT) {
@@ -362,7 +383,7 @@ void setup() {
   }
   else if (LOG_MODE == WIFI_PLUS_SERIAL)
   {
-    Serial.begin(115200); // TODO: delete
+    hwSerial.begin(115200); // TODO: delete
     WiFi.mode(WIFI_STA);   
     ThingSpeak.begin(client);
   }
@@ -410,7 +431,7 @@ void setup() {
       else if (LOG_MODE == WIFI) {
         if (USE_LED_INDICATOR == 1) updateLEDColor(Leq_dB);
 
-        if (logFlag == 9) {
+        if (logFlag == 1) {
           logFlag = 0;
           // Connect or reconnect to WiFi
           if(WiFi.status() != WL_CONNECTED){
@@ -453,21 +474,21 @@ void setup() {
         else logFlag = logFlag + 1;
       }
       else if (LOG_MODE == WIFI_PLUS_SERIAL) {
-        Serial.printf("%.1f %s\n", Leq_dB, DB_UNITS); // TODO: delete
+        hwSerial.printf("%.1f %s\n", Leq_dB, DB_UNITS); // TODO: delete
         if (USE_LED_INDICATOR == 1) updateLEDColor(Leq_dB);
 
-        if (logFlag == 9) {
+        if (logFlag == 1) {
           logFlag = 0;
 
           // Connect or reconnect to WiFi
           if(WiFi.status() != WL_CONNECTED){
-            Serial.print("Attempting to connect to WIFI...");
+            hwSerial.print("Attempting to connect to WIFI...");
             WiFi.begin(WIFI_SSID, WIFI_PASSWORD); 
             vTaskDelay(pdMS_TO_TICKS(5000)); // 5000 ms
             if (WiFi.status() != WL_CONNECTED){
-              Serial.println(" Couldn't connect.");
+              hwSerial.println(" Couldn't connect.");
             }
-            else Serial.println(" Connected.");
+            else hwSerial.println(" Connected.");
           }
 
           if (WiFi.status() == WL_CONNECTED){
@@ -476,10 +497,10 @@ void setup() {
             thingSpeakErrorCode = ThingSpeak.writeField(CHANNEL_NUMBER, 1, float(Leq_dB), WRITE_API_KEY);
 
             if(thingSpeakErrorCode == 200){
-              Serial.println("Channel update successful.");
+              hwSerial.println("Channel update successful.");
             }
             else{
-              Serial.println("Problem updating channel. HTTP error code " + String(thingSpeakErrorCode));
+              hwSerial.println("Problem updating channel. HTTP error code " + String(thingSpeakErrorCode));
             }
           }
         }
