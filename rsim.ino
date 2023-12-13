@@ -68,6 +68,7 @@ HardwareSerial hwSerial(0);
 #define GREEN 0
 #define YELLOW 1
 #define RED 2
+#define COLOR_PHASE 0
 
 // Color that the indicator is currently showing, -1 is the initial value
 short currentColor = -1;
@@ -272,7 +273,7 @@ void mic_i2s_reader_task(void* parameter) {
 // Update the LED indicators depending on Leq value
 void updateLEDColor(float Leq_dB){
   // If the indicator is just starting up (no previous measurements are available)
-  if (currentColor == -1) {
+  if ((currentColor == -1) || COLOR_PHASE == 0) {
     // Wait for 2 periods before switching colors up (only applicable once currentColor == GREEN | YELLOW | RED)
     switchFlag = false;
     // Turn the Green LED on if Leq is less than the limit
@@ -383,7 +384,7 @@ void setup() {
   }
   else if (LOG_MODE == WIFI_PLUS_SERIAL)
   {
-    hwSerial.begin(115200); // TODO: delete
+    hwSerial.begin(9600); // TODO: delete
     WiFi.mode(WIFI_STA);   
     ThingSpeak.begin(client);
   }
@@ -477,7 +478,7 @@ void setup() {
         hwSerial.printf("%.1f %s\n", Leq_dB, DB_UNITS); // TODO: delete
         if (USE_LED_INDICATOR == 1) updateLEDColor(Leq_dB);
 
-        if (logFlag == 1) {
+        if (logFlag == 8) {
           logFlag = 0;
 
           // Connect or reconnect to WiFi
