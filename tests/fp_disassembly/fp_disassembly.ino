@@ -1,3 +1,6 @@
+// This is a barebones copy of Ivan Kostoski's ESP32 Second-Order Sections IIR Filter implementation
+// intended only for disassembly
+
 #include <stdint.h>
 
 struct SOS_Coefficients {

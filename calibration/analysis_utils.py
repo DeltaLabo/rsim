@@ -5,14 +5,17 @@ from ordered_set import OrderedSet
 # Custom imports
 from audio_constants import ambient_volumes
 
+# Data container for the tests that perform a sweep across multiple frequencies and volumes
 class DataContainer(dict):
     # Format the data container for the specified test waves
     def __init__(self, test_waves, *args, **kwargs):
         super(DataContainer, self).__init__(*args, **kwargs)
 
+        # Create iterable lists of all the frequencies and volumes contained
         self.frequencies = OrderedSet()
         self.volumes = OrderedSet()
 
+        # Populate the iterables
         for freq in test_waves["frequencies"]:
             self.frequencies.add(freq)
             self[freq] = {}
@@ -21,12 +24,19 @@ class DataContainer(dict):
                 self.volumes.add(volume)
                 self[freq][volume] = np.array([])
 
-# Plot the sound level progression with respect to time, for each frequency
+# Plot the sound level progression with respect to time
 def plot_time_progression(measurements, reference, units, title, TIME_PERIOD):
     try:
+        # Iterate through the container's frequency list
         for freq in measurements.frequencies:
+            # Arrays to store all measurements taken at a certain frequency,
+            # across multiple volumes
+            # Measurements refers to the data collected with the Device Under Test,
+            # while the reference is an independently calibrated device
             measurements_freq_all = np.array([])
             reference_freq_all = np.array([])
+
+            # Accumulate the data points across all volumes
             for volume in measurements.volumes:
                 measurements_freq_all = np.append(measurements_freq_all, measurements[freq][volume])
                 reference_freq_all = np.append(reference_freq_all, reference[freq][volume])
@@ -38,7 +48,7 @@ def plot_time_progression(measurements, reference, units, title, TIME_PERIOD):
             plt.plot(x_axis, measurements_freq_all, label="ESP")
             plt.plot(x_axis, reference_freq_all, label="SLM")
 
-            # Add labels and a title (optional)
+            # Add labels and a title
             plt.xlabel("s")
             plt.ylabel(units)
             plt.title(f"Nivel de sonido con respecto al tiempo @ {freq} Hz" + title)
@@ -47,8 +57,11 @@ def plot_time_progression(measurements, reference, units, title, TIME_PERIOD):
             plt.tight_layout()  # Adjust layout for better spacing
             # Show the plot
             plt.show()
+    # Some data containers store data belonging to a single frequency and volume,
+    # so iterating through the frequency list will fail
     except AttributeError:
         # Create x-axis values
+        # In this case we don't need to accumulate the values for all volumes
         x_axis = [x * TIME_PERIOD for x in range(len(measurements))]
 
         # Create a plot
@@ -56,10 +69,11 @@ def plot_time_progression(measurements, reference, units, title, TIME_PERIOD):
             plt.plot(x_axis, measurements, label="ESP")
             plt.plot(x_axis, reference, label="SLM")
             plt.legend()
+        # Some data sets do not have a reference
         else:
             plt.plot(x_axis, measurements)
 
-        # Add labels and a title (optional)
+        # Add labels and a title
         plt.xlabel("s")
         plt.ylabel(units)
         plt.title(f"Nivel de sonido con respecto al tiempo" + title)
@@ -68,12 +82,14 @@ def plot_time_progression(measurements, reference, units, title, TIME_PERIOD):
         # Show the plot
         plt.show()
 
-# Plot color map
+# Applies the function to the measurements and reference data containers, and
+# creates a color map of the results
 def color_map(measurements, reference, function, title, function_units, weighted):
-    # Create an empty matrix to store MAE values
+    # Create an empty matrix to store values
+    # Set the size so there's a matrix entry for every frequency-volume pair
     matrix = np.zeros((len(measurements.frequencies), len(measurements.volumes)))
 
-    # Calculate MAE for all pairs of sets
+    # Apply functoin to calculate value for all pairs
     for i, freq in enumerate(measurements.frequencies):
         for j, volume in enumerate(measurements.volumes):
             matrix[i, j] = function(
@@ -83,24 +99,39 @@ def color_map(measurements, reference, function, title, function_units, weighted
 
     # Plot the MAE matrix as a colormap
     img = plt.imshow(matrix, cmap='viridis', interpolation='nearest')
+    # Add x- and y-axis ticks to show the corresponding frequencies and volumes
     plt.xticks(range(len(measurements.volumes)), measurements.volumes)
     plt.yticks(range(len(measurements.frequencies)), measurements.frequencies)
+    # Add units as axis labels
     plt.xlabel("dBA" if weighted else "dB")
     plt.ylabel("Hz")
+    # Add a color bar to interpret the values
     cbar = plt.colorbar()
+    # Add the corresponding units to the color bar
     cbar.set_label(function_units)
+    # Add the title
     plt.title(title)
+    # Show the color map
     plt.show()
 
+# Calculate Mean Average Error (MAE) between two data sets
 def calculate_mae(measurements, reference):
+    # The sets need to be the same size to calculate the MAE
     if len(measurements) != len(reference):
+        # Raise an error if they have different sizes
         raise ValueError("Both sets must have the same length")
+
+    # Calculate the MAE
     mae = np.mean(np.abs(measurements - reference))
     return mae
 
+# Calculate Root Mean Square Error (RMSE) between two data sets
 def calculate_rmse(measurements, reference):
+    # The sets need to be the same size to calculate the MAE
     if len(measurements) != len(reference):
-        raise ValueError("Input arrays must have the same length.")
+        # Raise an error if they have different sizes
+        raise ValueError("Both sets must have the same length")
+
     # Calculate the squared differences
     squared_diff = (measurements - reference) ** 2
     # Calculate the mean of squared differences
@@ -109,6 +140,7 @@ def calculate_rmse(measurements, reference):
     rmse = np.sqrt(mean_squared_diff)
     return rmse
 
+# Calculate mean gain between two data sets
 def calculate_gain(measurements, reference):
     if len(measurements) != len(reference):
         raise ValueError("Both sets must have the same length")
