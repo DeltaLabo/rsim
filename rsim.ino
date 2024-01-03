@@ -46,9 +46,9 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 // I2S pins - Can be routed to almost any (unused) ESP32 pin.
 //            SD can be any pin, inlcuding input only pins (36-39).
 //            SCK (i.e. BCLK) and WS (i.e. L/R CLK) must be output capable pins
-#define I2S_WS D2
-#define I2S_SD D8
-#define I2S_SCK D3
+#define I2S_WS D0
+#define I2S_SCK D1
+#define I2S_SD D10
 
 // LED indicator toggle
 #define USE_LED_INDICATOR 1
@@ -272,6 +272,14 @@ void leq_calculator_task(void* parameter) {
   double Logging_sum_sqr = 0;
   // Final noise level value in dB (with the selected weighting applied)
   double Leq_dB = 0;
+  // Equivalent noise level for one logging period
+  double Logging_leq = 0;
+  // Maximum noise level within one logging period
+  // Initialized to a value that's lower than any possible measurement
+  double Max_leq = MIC_NOISE_DB - 1.0;
+  // Minimum noise level within one logging period
+  // Initialized to a value that's higher than any possible measurement
+  double Min_leq = MIC_OVERLOAD_DB + 1.0;
 
   // Read sum of samples, calculated by 'i2s_reader_task'
   while (xQueueReceive(samples_queue, &q, portMAX_DELAY)) {
@@ -295,6 +303,10 @@ void leq_calculator_task(void* parameter) {
       if (Leq_dB > MIC_OVERLOAD_DB) Leq_dB = MIC_OVERLOAD_DB;
       else if (Leq_dB < MIC_NOISE_DB) Leq_dB = MIC_NOISE_DB;
 
+      // Update max and min values, if needed
+      if (Leq_dB < Min_leq) Min_leq = Leq_dB;
+      if (Leq_dB > Max_leq) Max_leq = Leq_dB;
+
       // Update the indicator
       if (USE_LED_INDICATOR == 1) updateLEDColor(Leq_dB);
       
@@ -309,9 +321,21 @@ void leq_calculator_task(void* parameter) {
         Logging_samples += Leq_samples;
 
         if (Logging_samples >= SAMPLE_RATE * LOGGING_PERIOD) {
-          // Reset the Leq and sample counter
+          // Calculate RMS of the equivalent sound level for the entire logging period
+          double Logging_leq_RMS = sqrt(Logging_sum_sqr / Logging_samples);
+          // Calculate sound level in decibels, with respect to the microphone reference
+          Logging_leq = MIC_OFFSET_DB + MIC_REF_DB + 20 * log10(Logging_leq_RMS / MIC_REF_AMPL);
+
+          // In case of acoustic overload or below noise floor measurement, report limit Leq value
+          if (Logging_leq > MIC_OVERLOAD_DB) Logging_leq = MIC_OVERLOAD_DB;
+          else if (Logging_leq < MIC_NOISE_DB) Logging_leq = MIC_NOISE_DB;
+
+          // Reset the sum of squares and sample counter
           Logging_sum_sqr = 0;
           Logging_samples = 0;
+          // Reset max and min values
+          Max_leq = 0;
+          Min_leq = 0;
 
           // Connect or reconnect to WiFi
           if(WiFi.status() != WL_CONNECTED){
@@ -327,9 +351,16 @@ void leq_calculator_task(void* parameter) {
           }
 
           if (WiFi.status() == WL_CONNECTED){
-            // Write to ThingSpeak.
-            // Params: Channel ID, Field Number, Value, Write API key
-            thingSpeakErrorCode = ThingSpeak.writeField(CHANNEL_NUMBER, 1, float(Leq_dB), WRITE_API_KEY);
+            // Write to ThingSpeak
+            // Field 1: Equivalent noise level for the entire time period
+            ThingSpeak.setField(1, float(Logging_leq));
+            // Field 2: Maximum indiviual measurement within the time period
+            ThingSpeak.setField(2, float(Max_leq));
+            // Field 3: Minimum indiviual measurement within the time period
+            ThingSpeak.setField(3, float(Min_leq));
+
+            // Params: Channel ID, Write API key
+            thingSpeakErrorCode = ThingSpeak.writeFields(CHANNEL_NUMBER, WRITE_API_KEY);
 
             /*
             Possible response codes:
@@ -345,6 +376,7 @@ void leq_calculator_task(void* parameter) {
             -401 - Point was not inserted (most probable cause is exceeding the rate limit)
             */
 
+            // Print ThingSpeak error code to HardwareSerial
             if(thingSpeakErrorCode == 200){
               if (LOG_MODE == WIFI_PLUS_SERIAL) hwSerial.println("Channel update successful.");
             }
@@ -355,7 +387,7 @@ void leq_calculator_task(void* parameter) {
         }
       }
 
-      // Reset the Leq and sample counter
+      // Reset the sum of squares and sample counter
       Leq_sum_sqr = 0;
       Leq_samples = 0;
     }
@@ -419,5 +451,5 @@ void setup() {
 }
 
 void loop() {
-  // Execution will never reach this point since we're using RTOS
+  // Execution will never reach this point since we're using FreeRTOS
 }
