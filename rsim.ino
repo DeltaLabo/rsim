@@ -16,6 +16,10 @@
 #define WRITE_API_KEY "CLXSWMD66IFK7PO4"
 #define CHANNEL_NUMBER 2363548
 
+#define RED 2
+#define YELLOW 1
+#define GREEN 0
+
 //
 // Configuration
 //
@@ -46,9 +50,9 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 // I2S pins - Can be routed to almost any (unused) ESP32 pin.
 //            SD can be any pin, inlcuding input only pins (36-39).
 //            SCK (i.e. BCLK) and WS (i.e. L/R CLK) must be output capable pins
-#define I2S_WS D0
-#define I2S_SCK D1
-#define I2S_SD D10
+#define I2S_WS  9// D9
+#define I2S_SCK 8// D8
+#define I2S_SD  10// D10
 
 // LED indicator toggle
 #define USE_LED_INDICATOR 1
@@ -73,6 +77,8 @@ short logFlag = 0;
 
 // Variable to store the ThingSpeak error code returned after sending data
 int thingSpeakErrorCode;
+
+int currentColor = 0;
 
 //
 // IIR Filters
