@@ -5,42 +5,12 @@
 #include <esp_now.h>
 #include <HardwareSerial.h>
 #include <esp_now.h>
-#include "LEDStripDriver.h"
+#include <esp_system.h>
 
+#include "rtc.h"
 #include <driver/i2s.h>
 #include "slm_params.h"
 #include "sos-iir-filter-xtensa.h"
-
-// WiFi parameters
-#define WIFI_SSID "LaboratorioDelta"
-#define WIFI_PASSWORD "labdelta21!"
-// ThingSpeak parameters
-#define WRITE_API_KEY "CLXSWMD66IFK7PO4"
-#define CHANNEL_NUMBER 2363548
-
-// ESPNOW MAC addresses
-uint8_t broadcastAddress[] = {0xC0, 0x4E, 0x30, 0x3A, 0x03, 0x34}; // For Xiao
-//uint8_t broadcastAddress[] = {0x48, 0x27, 0xE2, 0xE6, 0xDC, 0x84}; // For YD
-
-#define RED 2
-#define YELLOW 1
-#define GREEN 0
-
-//
-// Configuration
-//
-
-// Select how to log measurements
-// WiFi means ThingSpeak logging
-#define WIFI 0
-#define SERIAL 1
-#define WIFI_PLUS_SERIAL 2
-#define LOG_MODE WIFI_PLUS_SERIAL
-
-// Select ESPNOW syncing role
-#define SYNCER 0 // Sends timestamp to synchronize measurements
-#define LISTENER 1 // Receives timestamp
-#define SYNC_ROLE SYNCER
 
 // Equalizer used to flatten the microphone's frequency response
 #define MIC_EQUALIZER     INMP441
@@ -278,8 +248,11 @@ void mic_i2s_reader_task(void* parameter) {
     for(int i=0; i<SAMPLES_SHORT; i++) samples[i] = MIC_CONVERT(int_samples[i]);
 
     sum_queue_t q;
-    // Apply equalization and calculate Z-weighted sum of squares,
+    // Apply DC blocker,
     // writes filtered samples back to the same buffer.
+    q.sum_sqr_SPL = DC_BLOCKER.filter(samples, samples, SAMPLES_SHORT);
+
+    // Apply equalization and calculate Z-weighted sum of squares
     q.sum_sqr_SPL = MIC_EQUALIZER.filter(samples, samples, SAMPLES_SHORT);
 
     // Apply weighting and calculate weigthed sum of squares
@@ -441,15 +414,36 @@ void leq_calculator_task(void* parameter) {
   }
 }
 
-void RTC_updater_task() {
-  // Connect or reconnect to WiFi
-  if(WiFi.status() != WL_CONNECTED){
-    if (LOG_MODE == WIFI_PLUS_SERIAL) hwSerial.print("Attempting to connect to WIFI...");
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD); 
+void RTC_update_handler_task() {
+  // Create a software timer for RTC updates
+  TimerHandle_t UpdateTimer = xTimerCreate("RTC Update Timer",      // Timer name
+                                      pdMS_TO_TICKS(RTC_UPDATE_PERIOD), // Timer period
+                                      pdTRUE,              // Auto-reload
+                                      NULL,                // Timer ID
+                                      Update_RTC);      // Callback function
+
+  if (UpdateTimer != NULL) {
+      // Start the timer
+      xTimerStart(UpdateTimer, 0);
   }
 
-  if (WiFi.status() == WL_CONNECTED){
+  // Create a software timer to restart the ESP32
+  TimerHandle_t RestartTimer = xTimerCreate("ESP32 Restart Timer",      // Timer name
+                                    pdMS_TO_TICKS(ESP32_RESTART_PERIOD), // Timer period
+                                    pdTRUE,              // Auto-reload
+                                    NULL,                // Timer ID
+                                    esp_restart);      // Callback function
 
+  if (RestartTimer != NULL) {
+      // Start the timer
+      xTimerStart(RestartTimer, 0);
+  }
+
+  // Task code can continue here...
+
+  // Task should not exit
+  while(true) {
+      vTaskDelay(pdMS_TO_TICKS(100)); // Delay for 100 milliseconds
   }
 }
 
@@ -543,15 +537,17 @@ void setup() {
   //localReadings.color = 1; // For YD
   localReadings.counter = 0;
 
+  // Create the RTC update task and pin it to the second core (ID=1)
+  xTaskCreatePinnedToCore(RTC_update_handler_task, "RTC update handler", RTC_TASK_STACK, NULL, RTC_TASK_PRI, NULL, 1);
+
   // Create the mic reader task and pin it to the first core (ID=0)
   xTaskCreatePinnedToCore(mic_i2s_reader_task, "Mic I2S Reader", I2S_TASK_STACK, NULL, I2S_TASK_PRI, NULL, 0);
 
   // Create the Leq calculator task and pin it to the second core (ID=1)
   xTaskCreatePinnedToCore(leq_calculator_task, "Leq Calculator", LEQ_TASK_STACK, NULL, LEQ_TASK_PRI, NULL, 1);
-  // Create the RTC update task and pin it to the second core (ID=1)
-  xTaskCreatePinnedToCore(RTC_updater_task, "RTC updater", RTC_TASK_STACK, NULL, RTC_TASK_PRI, NULL, 1);
   
   delay(1000); // Safety
+  awaitEvenSecond();
 }
 
 void loop() {
