@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <cstring>
-#include "LEDStripDriver.h"
 
 #include <driver/i2s.h>
 #include "slm_params.h"
@@ -10,6 +9,15 @@
 #define YELLOW 1
 #define GREEN 0
 
+// For Xiao
+#define RED_LED_PIN D0 // D0
+#define GREEN_LED_PIN D1 // D1
+
+// For YD-ESP32
+/*
+#define RED_LED_PIN 21
+#define GREEN_LED_PIN 35
+*/
 //
 // Configuration
 //
@@ -40,16 +48,18 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 // I2S pins - Can be routed to almost any (unused) ESP32 pin.
 //            SD can be any pin, inlcuding input only pins (36-39).
 //            SCK (i.e. BCLK) and WS (i.e. L/R CLK) must be output capable pins
-#define I2S_WS  35// D9
-#define I2S_SCK 36// D8
-#define I2S_SD  37// D10
+
+#define I2S_WS  D2
+#define I2S_SCK D3
+#define I2S_SD  D8
+/*
+#define I2S_WS  13
+#define I2S_SCK 12
+#define I2S_SD  11
+*/
 
 // I2S peripheral to use (0 or 1)
 #define I2S_PORT          I2S_NUM_0
-
-// LED Strip Driver object
-// DIN=GPIO6 (Pin 5) CIN=GPIO7  (Pin 6)
-LEDStripDriver led = LEDStripDriver(20, 21);
 
 //
 // IIR Filters
@@ -143,6 +153,12 @@ QueueHandle_t samples_queue;
 
 // Static buffer for block of samples
 float samples[SAMPLES_SHORT] __attribute__((aligned(4)));
+
+int brightness = 255;
+int gBright = 0;
+int rBright = 0;
+int bBright = 0;
+int fadeSpeed = 5;
 
 //
 // I2S Microphone sampling setup 
@@ -302,17 +318,46 @@ void leq_calculator_task(void* parameter) {
 
 // Update the color indication based on the Leq value
 void updateColor(float Leq_dB){
+  int color;
+
   if (Leq_dB < GREEN_UPPER_LIMIT) {
-    led.setColor(0, 255, 0); // RGB Green
-    Serial.print("Green - ");
+    color = GREEN;
   }
   else if (Leq_dB < YELLOW_UPPER_LIMIT) {
-    led.setColor(0, 255, 255); // RGB Yellow
-    Serial.print("Yellow - ");
+    color = YELLOW;
   }
   else {
-    led.setColor(0, 0, 255); // RGB Red
-    Serial.print("Red - ");
+    color = RED;
+  }
+
+  analogWrite(GREEN_LED_PIN, 0);
+  analogWrite(RED_LED_PIN, 0);
+
+  if(color == RED){
+    for (int i = 0; i < 256; i++) {
+      analogWrite(RED_LED_PIN, rBright);
+      rBright +=1;
+      vTaskDelay(pdMS_TO_TICKS(fadeSpeed));
+    }
+  }
+  else if(color == GREEN){
+    for (int i = 0; i < 256; i++) {
+      analogWrite(GREEN_LED_PIN, gBright);
+      gBright +=1;
+      vTaskDelay(pdMS_TO_TICKS(fadeSpeed));
+    }    
+  }
+  else { // color == YELLOW
+    for (int i = 0; i < 240; i++) {
+        analogWrite(RED_LED_PIN, rBright);
+        rBright +=1;
+        if(i<100){
+        analogWrite(GREEN_LED_PIN, gBright);
+        gBright +=1;
+        Serial.print(gBright);
+        }
+    vTaskDelay(pdMS_TO_TICKS(fadeSpeed));
+    }
   }
 }
 
@@ -332,13 +377,16 @@ void setup() {
   // If the logging mode is Serial, initialize the HardwareSerial object
   if (LOG_MODE == SERIAL) Serial.begin(115200);
 
+  pinMode(GREEN_LED_PIN, OUTPUT);
+  pinMode(RED_LED_PIN, OUTPUT);
+
   // Create the mic reader task and pin it to the first core (ID=0)
   xTaskCreatePinnedToCore(mic_i2s_reader_task, "Mic I2S Reader", I2S_TASK_STACK, NULL, I2S_TASK_PRI, NULL, 0);
 
   // Create the Leq calculator task and pin it to the second core (ID=1)
   xTaskCreatePinnedToCore(leq_calculator_task, "Leq Calculator", LEQ_TASK_STACK, NULL, LEQ_TASK_PRI, NULL, 1);
 
-  delay(1000); // Safety
+  vTaskDelay(pdMS_TO_TICKS(1000)); // Safety
 }
 
 void loop() {
