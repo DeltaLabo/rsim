@@ -4,6 +4,16 @@ const char* ntpServer = "north-america.pool.ntp.org";
 const long  gmtOffset_sec = -6 * 3600; // GMT-6
 const int   daylightOffset_sec = 0; // No daylight savings
 
+struct tm_bytes {
+  byte tm_sec;
+  byte tm_min;
+  byte tm_hour;
+  byte tm_wday;
+  byte tm_mday;
+  byte tm_mon;
+  byte tm_year;
+} tm_bytes;
+
 // Convert normal decimal numbers to binary coded decimal
 byte decToBcd(byte val)
 {
@@ -31,13 +41,15 @@ dayOfMonth, byte month, byte year)
   Wire.endTransmission();
 }
 
-void readDS3231time(byte *second,
-byte *minute,
-byte *hour,
-byte *dayOfWeek,
-byte *dayOfMonth,
-byte *month,
-byte *year)
+void readDS3231time(
+  byte *second,
+  byte *minute,
+  byte *hour,
+  byte *dayOfWeek,
+  byte *dayOfMonth,
+  byte *month,
+  byte *year
+)
 {
   Wire.beginTransmission(DS3231_I2C_ADDRESS);
   Wire.write(0); // set DS3231 register pointer to 00h
@@ -62,38 +74,64 @@ void readDS3231seconds(byte *second) {
   *second = bcdToDec(Wire.read() & 0x7f);
 }
 
-void Update_RTC() {
+void Update_RTC(TimerHandle_t xTimer) {
   // Connect or reconnect to WiFi
   if(WiFi.status() != WL_CONNECTED){
-    if (LOG_MODE == WIFI_PLUS_SERIAL) hwSerial.print("Attempting to connect to WIFI...");
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD); 
+    if (LOG_MODE == WIFI_PLUS_SERIAL) Serial.print("Attempting to connect to WIFI...");
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    vTaskDelay(pdMS_TO_TICKS(300));
   }
 
   if (WiFi.status() == WL_CONNECTED){
     // Init and get the time
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
-    struct tm timeInfo;
+    struct tm_bytes timeInfo;
 
-    if(getLocalTime(&timeinfo)){
+    if(getLocalTimeinBytes(&timeInfo)){
       setDS3231time(
         timeInfo.tm_sec,
         timeInfo.tm_min,
         timeInfo.tm_hour,
         timeInfo.tm_wday,
         timeInfo.tm_mday,
-        timeInfo.tm_mon + 1, // Months start at 0
-        timeInfo.tm_year + 1900 // timeInfo only contains offset from 1900
+        timeInfo.tm_mon,
+        timeInfo.tm_year
       ); 
     }
   }
 }
 
 void awaitEvenSecond() {
-  byte second;
+  byte s0, s1;
+  // Initial time measurement
+  readDS3231seconds(&s0);
 
+  // Wait until next second change
   do {
-    readDS3231seconds(second);
+    readDS3231seconds(&s1);
   }
-  while(second % 2 != 0)
+  while(s0 == s1);
+  
+  // Wait until next even second
+  do {
+    readDS3231seconds(&s1);
+  }
+  while(s1 % 2 != 0);
+}
+
+bool getLocalTimeinBytes(struct tm_bytes *timeInfo_bytes) {
+  struct tm timeInfo;
+
+  bool result = getLocalTime(&timeInfo);
+
+  timeInfo_bytes->tm_sec = byte(timeInfo.tm_sec);
+  timeInfo_bytes->tm_min = byte(timeInfo.tm_min);
+  timeInfo_bytes->tm_hour = byte(timeInfo.tm_hour);
+  timeInfo_bytes->tm_wday = byte(timeInfo.tm_wday);
+  timeInfo_bytes->tm_mday = byte(timeInfo.tm_mday);
+  timeInfo_bytes->tm_mon = byte(timeInfo.tm_mon + 1); // Months start at 0
+  timeInfo_bytes->tm_year = byte(timeInfo.tm_year - 100); // timeInfo only contains offset from 1900
+
+  return result;
 }
