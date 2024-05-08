@@ -4,10 +4,17 @@
 #ifndef PARAMS_H
 #define PARAMS_H
 
+// ESP models
+#define YD // XIAO or YD
+
 // Periods
 #define LOGGING_PERIOD 64.0 // second(s)
 #define RTC_UPDATE_PERIOD 3600000 // millisecond(s), 1 hour
 #define ESP32_RESTART_PERIOD 86400000 // milliseconds(s), 24 hours
+
+#define MAX_LATENCY 200 // millisecond(s)
+#define SYNC_FAIL_LATENCY 2100 // millisecond(s)
+#define MAX_SYNC_FAILURES 200
 
 // WiFi parameters
 #define WIFI_SSID "LaboratorioDelta"
@@ -17,14 +24,22 @@
 #define WRITE_API_KEY "CLXSWMD66IFK7PO4"
 #define CHANNEL_NUMBER 2363548
 
+#ifdef XIAO
 // ESPNOW MAC addresses
-uint8_t broadcastAddress[] = {0xC0, 0x4E, 0x30, 0x3A, 0x03, 0x34}; // For Xiao
-//uint8_t broadcastAddress[] = {0x48, 0x27, 0xE2, 0xE6, 0xDC, 0x84}; // For YD
+const uint8_t broadcastAddress[] = {0xC0, 0x4E, 0x30, 0x3A, 0x03, 0x34}; // For Xiao
+#else
+#ifdef YD
+const uint8_t broadcastAddress[] = {0x48, 0x27, 0xE2, 0xE6, 0xDC, 0x84}; // For YD
+#endif
+#endif
 
 // Indicator color definitions
 #define RED 2
 #define YELLOW 1
 #define GREEN 0
+
+// Comment to leave BLUE_LED_PIN unused
+//#define USE_BLUE_LED
 
 //
 // Configuration
@@ -35,7 +50,7 @@ uint8_t broadcastAddress[] = {0xC0, 0x4E, 0x30, 0x3A, 0x03, 0x34}; // For Xiao
 #define WIFI 0
 #define SERIAL 1
 #define WIFI_PLUS_SERIAL 2
-#define LOG_MODE WIFI_PLUS_SERIAL
+#define LOG_MODE SERIAL
 
 #define LEQ_PERIOD        2.0      // second(s)
 #define WEIGHTING         A_weighting // 'A_weighting' 'C_weighting' or 'None' (Z_weighting)
