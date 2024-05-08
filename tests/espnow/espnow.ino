@@ -85,10 +85,6 @@ void setup() {
   }
   // Register for a callback function that will be called when data is received
   esp_now_register_recv_cb(OnDataRecv);
-
-  localReadings.color = 0; // For Xiao
-  //localReadings.color = 1; // For YD
-  localReadings.counter = 0;
 }
  
 void loop() {
