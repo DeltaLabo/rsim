@@ -6,6 +6,7 @@
 #include <HardwareSerial.h>
 #include <esp_now.h>
 #include <esp_system.h>
+#include "time.h"
 
 #include "rtc.h"
 #include <driver/i2s.h>
@@ -31,26 +32,40 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 // I2S pins - Can be routed to almost any (unused) ESP32 pin.
 //            SD can be any pin, inlcuding input only pins (36-39).
 //            SCK (i.e. BCLK) and WS (i.e. L/R CLK) must be output capable pins
-#define I2S_WS  9// D9
-#define I2S_SCK 8// D8
-#define I2S_SD  10// D10
 
-// LED indicator toggle
-#define USE_LED_INDICATOR 1
+#ifdef XIAO
+#define I2S_WS  D2
+#define I2S_SCK D3
+#define I2S_SD  D8
+#else
+#ifdef YD
+#define I2S_WS  13
+#define I2S_SCK 12
+#define I2S_SD  11
+#endif
+#endif
 
 // I2S peripheral to use (0 or 1)
 #define I2S_PORT          I2S_NUM_0
 
-// LED Strip Driver object
-// DIN=GPIO6 (Pin 5) CIN=GPIO7  (Pin 6)
-LEDStripDriver led = LEDStripDriver(5, 6);
+#ifdef XIAO
+#define RED_LED_PIN D0 
+#define GREEN_LED_PIN D1
+#ifdef USE_BLUE_LED
+#define BLUE_LED_PIN D9
+#endif
+#else
+#ifdef YD
+#define RED_LED_PIN 21
+#define GREEN_LED_PIN 35
+#ifdef USE_BLUE_LED
+#define BLUE_LED_PIN 20
+#endif
+#endif
+#endif
 
 // WiFi client used for ThingSpeak logging
 WiFiClient  client;
-
-// Hardware Serial object
-// Selected to avoid using the USB-C port while the ESP is running on battery power, which can cause electrical problems
-HardwareSerial hwSerial(0);
 
 // Flag to determine when to log measurements
 // Works as a counter of how many SLM periods have passed from the last logging event
@@ -62,17 +77,23 @@ int thingSpeakErrorCode;
 // Variable to store ESPNOW data transmission result
 String success;
 
-typedef struct message_struct {
+typedef struct espnow_message {
   int currentColor;
-  bool syncFlag;
-  timestamp;
-} message_struct;
+} espnow_message;
 
-int currentColor;
-int currentColorRX;
-uint32_t lastReceivedTime;
+espnow_message localReadings;
+espnow_message incomingReadings;
+
+TickType_t lastReceivedTime = 0;
+int syncFailureCounter = 0;
 
 esp_now_peer_info_t peerInfo;
+
+int brightness = 255;
+int gBright = 0;
+int rBright = 0;
+int bBright = 0;
+int fadeSpeed = 5;
 
 //
 // IIR Filters
@@ -81,7 +102,7 @@ esp_now_peer_info_t peerInfo;
 // DC-Blocker filter - removes DC component from I2S data
 // See: https://www.dsprelated.com/freebooks/filters/DC_Blocker.html
 // a1 = -0.9992 should heavily attenuate frequencies below 10Hz
-SOS_IIR_Filter DC_BLOCKER = { 
+SOS_IIR_Filter DC_BLOCKER = {
   gain: 1.0,
   sos: {{-1.0, 0.0, +0.9992, 0}}
 };
@@ -188,7 +209,7 @@ void mic_i2s_init() {
   // I2S pin mapping
   const i2s_pin_config_t pin_config = {
     bck_io_num:   I2S_SCK,  
-    ws_io_num:    I2S_WS,    
+    ws_io_num:    I2S_WS,
     data_out_num: -1, // not used
     data_in_num:  I2S_SD   
   };
@@ -268,16 +289,61 @@ void mic_i2s_reader_task(void* parameter) {
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   status == ESP_NOW_SEND_SUCCESS;
   if (status == 0){
-    success = "Delivery Success :)";
+    success = "Delivery Success";
   }
   else{
-    success = "Delivery Fail :(";
+    success = "Delivery Fail";
+  }
+}
+
+void logToThingSpeak(double Logging_leq, double Min_leq, double Max_leq) {
+  // Connect or reconnect to WiFi
+  if(WiFi.status() != WL_CONNECTED){
+    if (LOG_MODE == WIFI_PLUS_SERIAL) Serial.print("Attempting to connect to WIFI...");
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    vTaskDelay(pdMS_TO_TICKS(300));
+  }
+
+  if (WiFi.status() == WL_CONNECTED){
+    // Write to ThingSpeak
+    // Field 1: Equivalent noise level for the entire time period
+    ThingSpeak.setField(1, float(Logging_leq));
+    // Field 2: Maximum indiviual measurement within the time period
+    ThingSpeak.setField(2, float(Max_leq));
+    // Field 3: Minimum indiviual measurement within the time period
+    ThingSpeak.setField(3, float(Min_leq));
+
+    // Params: Channel ID, Write API key
+    thingSpeakErrorCode = ThingSpeak.writeFields(CHANNEL_NUMBER, WRITE_API_KEY);
+
+    /*
+    Possible response codes:
+    200 - OK / Success
+    404 - Incorrect API key (or invalid ThingSpeak server address)
+    -101 - Value is out of range or string is too long (> 255 characters)
+    -201 - Invalid field number specified
+    -210 - setField() was not called before writeFields()
+    -301 - Failed to connect to ThingSpeak
+    -302 -  Unexpected failure during write to ThingSpeak
+    -303 - Unable to parse response
+    -304 - Timeout waiting for server to respond
+    -401 - Point was not inserted (most probable cause is exceeding the rate limit)
+    */
+
+    // Print ThingSpeak error code to Serial
+    if(thingSpeakErrorCode == 200){
+      if (LOG_MODE == WIFI_PLUS_SERIAL) Serial.println("Channel update successful.");
+    }
+    else{
+      if (LOG_MODE == WIFI_PLUS_SERIAL) Serial.println("Problem updating channel. HTTP error code " + String(thingSpeakErrorCode));
+    }
   }
 }
 
 // Callback when data is received
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&incomingReadings, incomingData, sizeof(incomingReadings));
+  lastReceivedTime = xTaskGetTickCountFromISR();
 }
 
 void leq_calculator_task(void* parameter) {
@@ -330,16 +396,55 @@ void leq_calculator_task(void* parameter) {
 
       updateColor(Leq_dB);
       esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &localReadings, sizeof(localReadings));
-      localReadings.counter++;
-      compareReadings();
-      setLEDColor();
 
-      // Update the indicator
-      if (USE_LED_INDICATOR == 1) setLEDColor();
+      vTaskDelay(pdMS_TO_TICKS(30));
+      if (xTaskGetTickCount() - lastReceivedTime <= pdMS_TO_TICKS(MAX_LATENCY)) {
+        if (LOG_MODE == SERIAL || LOG_MODE == WIFI_PLUS_SERIAL) {
+          Serial.print("Incoming reading: ");
+          Serial.println(incomingReadings.currentColor);
+        }
+
+        syncFailureCounter = 0;
+
+        if (incomingReadings.currentColor > localReadings.currentColor)
+        {
+          setLEDColor(incomingReadings.currentColor);
+        }
+        else{
+          setLEDColor(localReadings.currentColor);  
+        }
+      }
+      else if (xTaskGetTickCount() - lastReceivedTime <= pdMS_TO_TICKS(SYNC_FAIL_LATENCY)) {
+        syncFailureCounter++;
+
+        if (syncFailureCounter >= MAX_SYNC_FAILURES) {
+          restart_esp(NULL);
+        }
+
+        if (LOG_MODE == SERIAL || LOG_MODE == WIFI_PLUS_SERIAL)
+        {
+          Serial.print("Did not receive any measurements. Failures: ");
+          Serial.println(syncFailureCounter);
+        }
+
+        setLEDColor(localReadings.currentColor);
+      }
+      else {
+        if (LOG_MODE == SERIAL || LOG_MODE == WIFI_PLUS_SERIAL)
+        {
+          Serial.print("Did not receive any measurements. There doesn't seem to be another RSIM device active within range.");
+          Serial.println(syncFailureCounter);
+        }
+
+        setLEDColor(localReadings.currentColor);
+      }
       
       // If Serial logging was selected, print the value to HardwareSerial
       if (LOG_MODE == SERIAL || LOG_MODE == WIFI_PLUS_SERIAL) {
-        hwSerial.println(Leq_dB);
+        Serial.print("Local reading: ");
+        Serial.print(Leq_dB);
+        Serial.print(" - ");
+        Serial.println(localReadings.currentColor);
       }
       if (LOG_MODE == WIFI || LOG_MODE == WIFI_PLUS_SERIAL) {
         // Accumulate Leq sum
@@ -347,6 +452,7 @@ void leq_calculator_task(void* parameter) {
         // Update the amount of samples read
         Logging_samples += Leq_samples;
 
+        // When a new dB measurement is ready
         if (Logging_samples >= SAMPLE_RATE * LOGGING_PERIOD) {
           // Calculate RMS of the equivalent sound level for the entire logging period
           double Logging_leq_RMS = sqrt(Logging_sum_sqr / Logging_samples);
@@ -357,53 +463,14 @@ void leq_calculator_task(void* parameter) {
           if (Logging_leq > MIC_OVERLOAD_DB) Logging_leq = MIC_OVERLOAD_DB;
           else if (Logging_leq < MIC_NOISE_DB) Logging_leq = MIC_NOISE_DB;
 
+          logToThingSpeak(Logging_leq, Min_leq, Max_leq);
+
           // Reset the sum of squares and sample counter
           Logging_sum_sqr = 0;
           Logging_samples = 0;
           // Reset max and min values
           Max_leq = 0;
           Min_leq = 0;
- 
-          // Connect or reconnect to WiFi
-          if(WiFi.status() != WL_CONNECTED){
-            if (LOG_MODE == WIFI_PLUS_SERIAL) hwSerial.print("Attempting to connect to WIFI...");
-            WiFi.begin(WIFI_SSID, WIFI_PASSWORD); 
-          }
-
-          if (WiFi.status() == WL_CONNECTED){
-            // Write to ThingSpeak
-            // Field 1: Equivalent noise level for the entire time period
-            ThingSpeak.setField(1, float(Logging_leq));
-            // Field 2: Maximum indiviual measurement within the time period
-            ThingSpeak.setField(2, float(Max_leq));
-            // Field 3: Minimum indiviual measurement within the time period
-            ThingSpeak.setField(3, float(Min_leq));
-
-            // Params: Channel ID, Write API key
-            thingSpeakErrorCode = ThingSpeak.writeFields(CHANNEL_NUMBER, WRITE_API_KEY);
-
-            /*
-            Possible response codes:
-            200 - OK / Success
-            404 - Incorrect API key (or invalid ThingSpeak server address)
-            -101 - Value is out of range or string is too long (> 255 characters)
-            -201 - Invalid field number specified
-            -210 - setField() was not called before writeFields()
-            -301 - Failed to connect to ThingSpeak
-            -302 -  Unexpected failure during write to ThingSpeak
-            -303 - Unable to parse response
-            -304 - Timeout waiting for server to respond
-            -401 - Point was not inserted (most probable cause is exceeding the rate limit)
-            */
-
-            // Print ThingSpeak error code to HardwareSerial
-            if(thingSpeakErrorCode == 200){
-              if (LOG_MODE == WIFI_PLUS_SERIAL) hwSerial.println("Channel update successful.");
-            }
-            else{
-              if (LOG_MODE == WIFI_PLUS_SERIAL) hwSerial.println("Problem updating channel. HTTP error code " + String(thingSpeakErrorCode));
-            }
-          } 
         }
       }
 
@@ -414,7 +481,11 @@ void leq_calculator_task(void* parameter) {
   }
 }
 
-void RTC_update_handler_task() {
+void restart_esp(TimerHandle_t xTimer) {
+  esp_restart();
+}
+
+void RTC_update_handler_task(void* parameter) {
   // Create a software timer for RTC updates
   TimerHandle_t UpdateTimer = xTimerCreate("RTC Update Timer",      // Timer name
                                       pdMS_TO_TICKS(RTC_UPDATE_PERIOD), // Timer period
@@ -432,7 +503,7 @@ void RTC_update_handler_task() {
                                     pdMS_TO_TICKS(ESP32_RESTART_PERIOD), // Timer period
                                     pdTRUE,              // Auto-reload
                                     NULL,                // Timer ID
-                                    esp_restart);      // Callback function
+                                    restart_esp);      // Callback function
 
   if (RestartTimer != NULL) {
       // Start the timer
@@ -461,27 +532,37 @@ void updateColor(float Leq_dB){
 }
 
 // Update the LED color
-void setLEDColor(){
-  if (localReadings.counter == incomingReadings.counter) {
-    if (localReadings.currentColor == RED || incomingReadings.currentColor == RED) {
-      led.setColor(255, 0, 0); // RGB Red
-    }
-    else if (localReadings.currentColor == YELLOW || incomingReadings.currentColor == YELLOW) {
-      led.setColor(255, 255, 0); // RGB Yellow
-    }
-    else {
-      led.setColor(0, 255, 0); // RGB Green
+void setLEDColor(int color){
+  analogWrite(GREEN_LED_PIN, 0);
+  analogWrite(RED_LED_PIN, 0);
+  #ifdef USE_BLUE_LED
+  analogWrite(BLUE_LED_PIN, 0);
+  #endif
+
+  if(color == RED){
+    for (int i = 0; i < 256; i++) {
+      analogWrite(RED_LED_PIN, rBright);
+      rBright +=1;
+      vTaskDelay(pdMS_TO_TICKS(fadeSpeed));
     }
   }
-  else {
-    if (localReadings.currentColor == RED) {
-      led.setColor(255, 0, 0); // RGB Red
-    }
-    else if (localReadings.currentColor == YELLOW) {
-      led.setColor(255, 255, 0); // RGB Yellow
-    }
-    else {
-      led.setColor(0, 255, 0); // RGB Green
+  else if(color == GREEN){
+    for (int i = 0; i < 256; i++) {
+      analogWrite(GREEN_LED_PIN, gBright);
+      gBright +=1;
+      vTaskDelay(pdMS_TO_TICKS(fadeSpeed));
+    }    
+  }
+  else { // color == YELLOW
+    for (int i = 0; i < 240; i++) {
+        analogWrite(RED_LED_PIN, rBright);
+        rBright +=1;
+        if(i<100){
+        analogWrite(GREEN_LED_PIN, gBright);
+        gBright +=1;
+        Serial.print(gBright);
+        }
+    vTaskDelay(pdMS_TO_TICKS(fadeSpeed));
     }
   }
 }
@@ -496,11 +577,25 @@ void setLEDColor(){
 void setup() {
   setCpuFrequencyMhz(230);
 
+  pinMode(GREEN_LED_PIN, OUTPUT);
+  pinMode(RED_LED_PIN, OUTPUT);
+  #ifdef USE_BLUE_LED
+  pinMode(BLUE_LED_PIN, OUTPUT);
+  #endif
+
+  #ifdef XIAO
+  Wire.begin(4, 5); // Xiao SDA, SCL
+  #else
+  #ifdef YD
+  Wire.begin(16, 17); // YD ESP32 SDA, SCL
+  #endif
+  #endif
+
   // Create FreeRTOS queue
   samples_queue = xQueueCreate(8, sizeof(sum_queue_t));
 
   // If the logging mode is Serial, initialize the HardwareSerial object
-  if (LOG_MODE == SERIAL) hwSerial.begin(115200);
+  if (LOG_MODE == SERIAL) Serial.begin(115200);
   else if (LOG_MODE == WIFI) { 
     // Initialize the ThingSpeak object with the required WiFi client
     ThingSpeak.begin(client);
@@ -508,7 +603,7 @@ void setup() {
   else if (LOG_MODE == WIFI_PLUS_SERIAL)
   {
     // Initialize both the HardwareSerial and ThingSpeak objects 
-    hwSerial.begin(115200); 
+    Serial.begin(115200); 
     ThingSpeak.begin(client);
   }
 
@@ -533,10 +628,6 @@ void setup() {
   // Register for a callback function that will be called when data is received
   esp_now_register_recv_cb(OnDataRecv);
 
-  localReadings.color = 0; // For Xiao
-  //localReadings.color = 1; // For YD
-  localReadings.counter = 0;
-
   // Create the RTC update task and pin it to the second core (ID=1)
   xTaskCreatePinnedToCore(RTC_update_handler_task, "RTC update handler", RTC_TASK_STACK, NULL, RTC_TASK_PRI, NULL, 1);
 
@@ -546,7 +637,8 @@ void setup() {
   // Create the Leq calculator task and pin it to the second core (ID=1)
   xTaskCreatePinnedToCore(leq_calculator_task, "Leq Calculator", LEQ_TASK_STACK, NULL, LEQ_TASK_PRI, NULL, 1);
   
-  delay(1000); // Safety
+  vTaskDelay(pdMS_TO_TICKS(1000)); // Safety
+  Update_RTC(NULL);
   awaitEvenSecond();
 }
 
