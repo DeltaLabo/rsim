@@ -16,6 +16,8 @@
 #define SYNC_FAIL_LATENCY 2100 // millisecond(s)
 #define MAX_SYNC_FAILURES 200
 
+#define ESPNOW_MAX_INIT_FAILURES 10
+
 // WiFi parameters
 #define WIFI_SSID "LaboratorioDelta"
 #define WIFI_PASSWORD "labdelta21!"
@@ -45,12 +47,8 @@ const uint8_t broadcastAddress[] = {0x48, 0x27, 0xE2, 0xE6, 0xDC, 0x84}; // For 
 // Configuration
 //
 
-// Select how to log measurements
-// WiFi means ThingSpeak logging
-#define WIFI 0
-#define SERIAL 1
-#define WIFI_PLUS_SERIAL 2
-#define LOG_MODE SERIAL
+// Set to 1/0 to enable/disable ThingSpeak logging
+#define USE_THINGSPEAK 1
 
 #define LEQ_PERIOD        2.0      // second(s)
 #define WEIGHTING         A_weighting // 'A_weighting' 'C_weighting' or 'None' (Z_weighting)

@@ -64,6 +64,9 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 #endif
 #endif
 
+// HardwareSerial for logging
+HardwareSerial HwSerial(0);
+
 // WiFi client used for ThingSpeak logging
 WiFiClient  client;
 
@@ -289,28 +292,28 @@ void mic_i2s_reader_task(void* parameter) {
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   status == ESP_NOW_SEND_SUCCESS;
   if (status == 0){
-    success = "Delivery Success";
+    HwSerial.println("[INFO] [ESPNOW]: Delivery success.");
   }
   else{
-    success = "Delivery Fail";
+    HwSerial.println("[ERROR] [ESPNOW]: Delivery fail.");
   }
 }
 
-void logToThingSpeak(double Logging_leq, double Min_leq, double Max_leq) {
+void logToThingSpeak(double Logging_leq, double Max_leq, double Min_leq) {
   // Connect or reconnect to WiFi
   if(WiFi.status() != WL_CONNECTED){
-    if (LOG_MODE == WIFI_PLUS_SERIAL) Serial.print("Attempting to connect to WIFI...");
+    HwSerial.print("[INFO] [THINGSPEAK]: Attempting to connect to WIFI...");
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     vTaskDelay(pdMS_TO_TICKS(300));
   }
 
   if (WiFi.status() == WL_CONNECTED){
     // Write to ThingSpeak
-    // Field 1: Equivalent noise level for the entire time period
+    // Field 1: Equivalent noise level for the entire time period (Local)
     ThingSpeak.setField(1, float(Logging_leq));
-    // Field 2: Maximum indiviual measurement within the time period
+    // Field 2: Maximum indiviual measurement within the time period (Local)
     ThingSpeak.setField(2, float(Max_leq));
-    // Field 3: Minimum indiviual measurement within the time period
+    // Field 3: Minimum indiviual measurement within the time period (Local)
     ThingSpeak.setField(3, float(Min_leq));
 
     // Params: Channel ID, Write API key
@@ -330,13 +333,16 @@ void logToThingSpeak(double Logging_leq, double Min_leq, double Max_leq) {
     -401 - Point was not inserted (most probable cause is exceeding the rate limit)
     */
 
-    // Print ThingSpeak error code to Serial
+    // Print ThingSpeak error code to HwSerial
     if(thingSpeakErrorCode == 200){
-      if (LOG_MODE == WIFI_PLUS_SERIAL) Serial.println("Channel update successful.");
+      HwSerial.println("[INFO] [THINGSPEAK]: Channel update successful.");
     }
     else{
-      if (LOG_MODE == WIFI_PLUS_SERIAL) Serial.println("Problem updating channel. HTTP error code " + String(thingSpeakErrorCode));
+      HwSerial.println("[ERROR] [THINGSPEAK]: Problem updating channel. HTTP error code " + String(thingSpeakErrorCode));
     }
+  }
+  else {
+    HwSerial.println("[ERROR] [THINGSPEAK]: Could not connect to WiFi.");
   }
 }
 
@@ -344,6 +350,8 @@ void logToThingSpeak(double Logging_leq, double Min_leq, double Max_leq) {
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&incomingReadings, incomingData, sizeof(incomingReadings));
   lastReceivedTime = xTaskGetTickCountFromISR();
+  HwSerial.print("[INFO] [ESPNOW]: Data received, Color: ");
+  HwSerial.println(incomingReadings.currentColor);
 }
 
 void leq_calculator_task(void* parameter) {
@@ -359,7 +367,7 @@ void leq_calculator_task(void* parameter) {
   double Logging_sum_sqr = 0;
   // Final noise level value in dB (with the selected weighting applied)
   double Leq_dB = 0;
-  // Equivalent noise level for one logging period
+  // Final noise level value for one logging period in dB (with the selected weighting applied)
   double Logging_leq = 0;
   // Maximum noise level within one logging period
   // Initialized to a value that's lower than any possible measurement
@@ -395,14 +403,55 @@ void leq_calculator_task(void* parameter) {
       if (Leq_dB > Max_leq) Max_leq = Leq_dB;
 
       updateColor(Leq_dB);
+      HwSerial.print("[INFO] [SLM]: Local reading: ");
+      HwSerial.print(Leq_dB);
+      HwSerial.print(", Color: ");
+      HwSerial.println(localReadings.currentColor);
+      
+      // ThingSpeak data calculation
+      // Accumulate Leq sum
+      Logging_sum_sqr += Leq_sum_sqr;
+      // Update the amount of samples read
+      Logging_samples += Leq_samples;
+
+      // When a new dB measurement is ready
+      if (Logging_samples >= SAMPLE_RATE * LOGGING_PERIOD) {
+        // Calculate RMS of the equivalent sound level for the entire logging period
+        double Logging_leq_RMS = sqrt(Logging_sum_sqr / Logging_samples);
+        // Calculate sound level in decibels, with respect to the microphone reference
+        Logging_leq = MIC_OFFSET_DB + MIC_REF_DB + 20 * log10(Logging_leq_RMS / MIC_REF_AMPL);
+
+        // In case of acoustic overload or below noise floor measurement, report limit Leq value
+        if (Logging_leq > MIC_OVERLOAD_DB) Logging_leq = MIC_OVERLOAD_DB;
+        else if (Logging_leq < MIC_NOISE_DB) Logging_leq = MIC_NOISE_DB;
+
+        if (USE_THINGSPEAK == 1) logToThingSpeak(Logging_leq, Max_leq, Min_leq);
+
+        // Reset the sum of squares and sample counter
+        Logging_sum_sqr = 0;
+        Logging_samples = 0;
+        // Reset max and min values
+        Max_leq = MIC_NOISE_DB - 1.0;
+        Min_leq = MIC_OVERLOAD_DB + 1.0;
+      }
+
+      // Reset the sum of squares and sample counter
+      Leq_sum_sqr = 0;
+      Leq_samples = 0;
+
+      // ESP-NOW comms
       esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &localReadings, sizeof(localReadings));
 
+      TickType_t latency = 0;
+
       vTaskDelay(pdMS_TO_TICKS(30));
-      if (xTaskGetTickCount() - lastReceivedTime <= pdMS_TO_TICKS(MAX_LATENCY)) {
-        if (LOG_MODE == SERIAL || LOG_MODE == WIFI_PLUS_SERIAL) {
-          Serial.print("Incoming reading: ");
-          Serial.println(incomingReadings.currentColor);
-        }
+      latency = xTaskGetTickCount() - lastReceivedTime;
+
+      if (latency <= pdMS_TO_TICKS(MAX_LATENCY)) {
+        HwSerial.print("[INFO] [ESPNOW]: Incoming reading received on time, Color: ");
+        HwSerial.print(incomingReadings.currentColor);
+        HwSerial.print(", Latency: ");
+        HwSerial.println(latency);
 
         syncFailureCounter = 0;
 
@@ -414,69 +463,28 @@ void leq_calculator_task(void* parameter) {
           setLEDColor(localReadings.currentColor);  
         }
       }
-      else if (xTaskGetTickCount() - lastReceivedTime <= pdMS_TO_TICKS(SYNC_FAIL_LATENCY)) {
+      else if (latency <= pdMS_TO_TICKS(SYNC_FAIL_LATENCY)) {
         syncFailureCounter++;
 
         if (syncFailureCounter >= MAX_SYNC_FAILURES) {
+          HwSerial.println("[ERROR] [ESPNOW]: Sync failures have exceeded the limit. Restarting ESP.")
           restart_esp(NULL);
         }
 
-        if (LOG_MODE == SERIAL || LOG_MODE == WIFI_PLUS_SERIAL)
-        {
-          Serial.print("Did not receive any measurements. Failures: ");
-          Serial.println(syncFailureCounter);
-        }
+        HwSerial.print("[ERROR] [ESPNOW]: Incoming reading was not received on time, Color: ");
+        HwSerial.print(incomingReadings.currentColor);
+        HwSerial.print(", Latency: ");
+        HwSerial.print(latency);
+        HwSerial.print(", Failures: ");
+        HwSerial.println(syncFailureCounter);
 
         setLEDColor(localReadings.currentColor);
       }
       else {
-        if (LOG_MODE == SERIAL || LOG_MODE == WIFI_PLUS_SERIAL)
-        {
-          Serial.print("Did not receive any measurements. There doesn't seem to be another RSIM device active within range.");
-          Serial.println(syncFailureCounter);
-        }
+        HwSerial.print("[ERROR] [ESPNOW]: Did not receive any measurements. There doesn't seem to be another RSIM device active within range.");
 
         setLEDColor(localReadings.currentColor);
       }
-      
-      // If Serial logging was selected, print the value to HardwareSerial
-      if (LOG_MODE == SERIAL || LOG_MODE == WIFI_PLUS_SERIAL) {
-        Serial.print("Local reading: ");
-        Serial.print(Leq_dB);
-        Serial.print(" - ");
-        Serial.println(localReadings.currentColor);
-      }
-      if (LOG_MODE == WIFI || LOG_MODE == WIFI_PLUS_SERIAL) {
-        // Accumulate Leq sum
-        Logging_sum_sqr += Leq_sum_sqr;
-        // Update the amount of samples read
-        Logging_samples += Leq_samples;
-
-        // When a new dB measurement is ready
-        if (Logging_samples >= SAMPLE_RATE * LOGGING_PERIOD) {
-          // Calculate RMS of the equivalent sound level for the entire logging period
-          double Logging_leq_RMS = sqrt(Logging_sum_sqr / Logging_samples);
-          // Calculate sound level in decibels, with respect to the microphone reference
-          Logging_leq = MIC_OFFSET_DB + MIC_REF_DB + 20 * log10(Logging_leq_RMS / MIC_REF_AMPL);
-
-          // In case of acoustic overload or below noise floor measurement, report limit Leq value
-          if (Logging_leq > MIC_OVERLOAD_DB) Logging_leq = MIC_OVERLOAD_DB;
-          else if (Logging_leq < MIC_NOISE_DB) Logging_leq = MIC_NOISE_DB;
-
-          logToThingSpeak(Logging_leq, Min_leq, Max_leq);
-
-          // Reset the sum of squares and sample counter
-          Logging_sum_sqr = 0;
-          Logging_samples = 0;
-          // Reset max and min values
-          Max_leq = 0;
-          Min_leq = 0;
-        }
-      }
-
-      // Reset the sum of squares and sample counter
-      Leq_sum_sqr = 0;
-      Leq_samples = 0;
     }
   }
 }
@@ -560,7 +568,7 @@ void setLEDColor(int color){
         if(i<100){
         analogWrite(GREEN_LED_PIN, gBright);
         gBright +=1;
-        Serial.print(gBright);
+        HwSerial.print(gBright);
         }
     vTaskDelay(pdMS_TO_TICKS(fadeSpeed));
     }
@@ -594,26 +602,31 @@ void setup() {
   // Create FreeRTOS queue
   samples_queue = xQueueCreate(8, sizeof(sum_queue_t));
 
-  // If the logging mode is Serial, initialize the HardwareSerial object
-  if (LOG_MODE == SERIAL) Serial.begin(115200);
-  else if (LOG_MODE == WIFI) { 
+  // Configure HwSerial on pins RX=D7, TX=D6
+  HwSerial.begin(115200, SERIAL_8N1, 7, 6);
+
+  if (USE_THINGSPEAK == 1) { 
     // Initialize the ThingSpeak object with the required WiFi client
-    ThingSpeak.begin(client);
-  }
-  else if (LOG_MODE == WIFI_PLUS_SERIAL)
-  {
-    // Initialize both the HardwareSerial and ThingSpeak objects 
-    Serial.begin(115200); 
     ThingSpeak.begin(client);
   }
 
   // Required to use IEEE 802.11 WiFi standard and ESPNOW
   WiFi.mode(WIFI_STA);
+
+  int espnowInitCounter = 0;
+
   // Init ESPNOW
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
-    return;
+  while (esp_now_init() != ESP_OK && espnowInitCounter < ESPNOW_MAX_INIT_FAILURES) {
+    espnowInitCounter++;
+    HwSerial.print("[ERROR] [ESPNOW]: Could not initialize ESP-NOW. Failures: ");
+    HwSerial.println(espnowInitCounter);
   }
+
+  if (!(espnowInitCounter < ESPNOW_MAX_INIT_FAILURES)) {
+    HwSerial.print("[ERROR] [ESPNOW]: ESP-NOW initialization failures have exceeded the limit. Restarting ESP. ");
+    restart_esp(NULL);
+  }
+  else espnowInitCounter = 0;
 
   // Register ESPNOW peer
   memcpy(peerInfo.peer_addr, broadcastAddress, 6);
@@ -621,10 +634,18 @@ void setup() {
   peerInfo.encrypt = false;
   
   // Add peer        
-  if (esp_now_add_peer(&peerInfo) != ESP_OK){
-    Serial.println("Failed to add peer");
-    return;
+  while (esp_now_add_peer(&peerInfo) != ESP_OK && espnowInitCounter < ESPNOW_MAX_INIT_FAILURES){
+    espnowInitCounter++;
+    HwSerial.print("[ERROR] [ESPNOW]: Failed to add peer. Failures: ");
+    HwSerial.println(espnowInitCounter);
   }
+
+  if (!(espnowInitCounter < ESPNOW_MAX_INIT_FAILURES)) {
+    HwSerial.print("[ERROR] [ESPNOW]: ESP-NOW initialization failures have exceeded the limit. Restarting ESP. ");
+    restart_esp(NULL);
+  }
+  else espnowInitCounter = 0;
+
   // Register for a callback function that will be called when data is received
   esp_now_register_recv_cb(OnDataRecv);
 

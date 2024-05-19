@@ -77,7 +77,7 @@ void readDS3231seconds(byte *second) {
 void Update_RTC(TimerHandle_t xTimer) {
   // Connect or reconnect to WiFi
   if(WiFi.status() != WL_CONNECTED){
-    if (LOG_MODE == WIFI_PLUS_SERIAL) Serial.print("Attempting to connect to WIFI...");
+    HwSerial.print("[INFO] [RTC]: Attempting to connect to WIFI...");
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     vTaskDelay(pdMS_TO_TICKS(300));
   }
@@ -97,12 +97,16 @@ void Update_RTC(TimerHandle_t xTimer) {
         timeInfo.tm_mday,
         timeInfo.tm_mon,
         timeInfo.tm_year
-      ); 
+      );
+      HwSerial.println("[INFO] [RTC]: RTC time updated.");
     }
+    else HwSerial.println("[ERROR] [RTC]: Could not update RTC time.");
   }
+  else HwSerial.println("[ERROR] [RTC]: Could not connect to WiFi.");
 }
 
 void awaitEvenSecond() {
+  HwSerial.println("[INFO] [RTC]: Awaiting even second...");
   byte s0, s1;
   // Initial time measurement
   readDS3231seconds(&s0);
@@ -118,6 +122,8 @@ void awaitEvenSecond() {
     readDS3231seconds(&s1);
   }
   while(s1 % 2 != 0);
+
+  HwSerial.println("[INFO] [RTC]: Ready to start.")
 }
 
 bool getLocalTimeinBytes(struct tm_bytes *timeInfo_bytes) {
