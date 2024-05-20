@@ -4,12 +4,11 @@
 #include <cstring>
 #include <esp_now.h>
 #include <HardwareSerial.h>
-#include <esp_now.h>
 #include <esp_system.h>
 #include "time.h"
 
 #include "rtc.h"
-#include <driver/i2s.h>
+#include "driver/i2s.h"
 #include "slm_params.h"
 #include "sos-iir-filter-xtensa.h"
 
@@ -467,7 +466,7 @@ void leq_calculator_task(void* parameter) {
         syncFailureCounter++;
 
         if (syncFailureCounter >= MAX_SYNC_FAILURES) {
-          HwSerial.println("[ERROR] [ESPNOW]: Sync failures have exceeded the limit. Restarting ESP.")
+          HwSerial.println("[ERROR] [ESPNOW]: Sync failures have exceeded the limit. Restarting ESP.");
           restart_esp(NULL);
         }
 
@@ -491,6 +490,58 @@ void leq_calculator_task(void* parameter) {
 
 void restart_esp(TimerHandle_t xTimer) {
   esp_restart();
+}
+
+void Update_RTC(TimerHandle_t xTimer) {
+  // Connect or reconnect to WiFi
+  if(WiFi.status() != WL_CONNECTED){
+    HwSerial.print("[INFO] [RTC]: Attempting to connect to WIFI...");
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    vTaskDelay(pdMS_TO_TICKS(300));
+  }
+
+  if (WiFi.status() == WL_CONNECTED){
+    // Init and get the time
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+    struct tm_bytes timeInfo;
+
+    if(getLocalTimeinBytes(&timeInfo)){
+      setDS3231time(
+        timeInfo.tm_sec,
+        timeInfo.tm_min,
+        timeInfo.tm_hour,
+        timeInfo.tm_wday,
+        timeInfo.tm_mday,
+        timeInfo.tm_mon,
+        timeInfo.tm_year
+      );
+      HwSerial.println("[INFO] [RTC]: RTC time updated.");
+    }
+    else HwSerial.println("[ERROR] [RTC]: Could not update RTC time.");
+  }
+  else HwSerial.println("[ERROR] [RTC]: Could not connect to WiFi.");
+}
+
+void awaitEvenSecond() {
+  HwSerial.println("[INFO] [RTC]: Awaiting even second...");
+  byte s0, s1;
+  // Initial time measurement
+  readDS3231seconds(&s0);
+
+  // Wait until next second change
+  do {
+    readDS3231seconds(&s1);
+  }
+  while(s0 == s1);
+  
+  // Wait until next even second
+  do {
+    readDS3231seconds(&s1);
+  }
+  while(s1 % 2 != 0);
+
+  HwSerial.println("[INFO] [RTC]: Ready to start.");
 }
 
 void RTC_update_handler_task(void* parameter) {

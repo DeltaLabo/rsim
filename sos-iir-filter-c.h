@@ -17,8 +17,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef SOS_IIR_FILTER_H
-#define SOS_IIR_FILTER_H
+#ifndef SOS_IIR_FILTER_C_H
+#define SOS_IIR_FILTER_C_H
 
 #include <stdint.h>
 

@@ -1,5 +1,5 @@
-#ifndef SOS_IIR_FILTER_H
-#define SOS_IIR_FILTER_H
+#ifndef SOS_IIR_FILTER_RISCV_H
+#define SOS_IIR_FILTER_RISCV_H
 
 #include <stdint.h>
 

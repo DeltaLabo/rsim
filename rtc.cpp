@@ -1,19 +1,5 @@
 #include "rtc.h"
 
-const char* ntpServer = "north-america.pool.ntp.org";
-const long  gmtOffset_sec = -6 * 3600; // GMT-6
-const int   daylightOffset_sec = 0; // No daylight savings
-
-struct tm_bytes {
-  byte tm_sec;
-  byte tm_min;
-  byte tm_hour;
-  byte tm_wday;
-  byte tm_mday;
-  byte tm_mon;
-  byte tm_year;
-} tm_bytes;
-
 // Convert normal decimal numbers to binary coded decimal
 byte decToBcd(byte val)
 {
@@ -72,58 +58,6 @@ void readDS3231seconds(byte *second) {
   Wire.requestFrom(DS3231_I2C_ADDRESS, 1);
   // request 1 byte of data from DS3231 starting from register 00h
   *second = bcdToDec(Wire.read() & 0x7f);
-}
-
-void Update_RTC(TimerHandle_t xTimer) {
-  // Connect or reconnect to WiFi
-  if(WiFi.status() != WL_CONNECTED){
-    HwSerial.print("[INFO] [RTC]: Attempting to connect to WIFI...");
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    vTaskDelay(pdMS_TO_TICKS(300));
-  }
-
-  if (WiFi.status() == WL_CONNECTED){
-    // Init and get the time
-    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-
-    struct tm_bytes timeInfo;
-
-    if(getLocalTimeinBytes(&timeInfo)){
-      setDS3231time(
-        timeInfo.tm_sec,
-        timeInfo.tm_min,
-        timeInfo.tm_hour,
-        timeInfo.tm_wday,
-        timeInfo.tm_mday,
-        timeInfo.tm_mon,
-        timeInfo.tm_year
-      );
-      HwSerial.println("[INFO] [RTC]: RTC time updated.");
-    }
-    else HwSerial.println("[ERROR] [RTC]: Could not update RTC time.");
-  }
-  else HwSerial.println("[ERROR] [RTC]: Could not connect to WiFi.");
-}
-
-void awaitEvenSecond() {
-  HwSerial.println("[INFO] [RTC]: Awaiting even second...");
-  byte s0, s1;
-  // Initial time measurement
-  readDS3231seconds(&s0);
-
-  // Wait until next second change
-  do {
-    readDS3231seconds(&s1);
-  }
-  while(s0 == s1);
-  
-  // Wait until next even second
-  do {
-    readDS3231seconds(&s1);
-  }
-  while(s1 % 2 != 0);
-
-  HwSerial.println("[INFO] [RTC]: Ready to start.")
 }
 
 bool getLocalTimeinBytes(struct tm_bytes *timeInfo_bytes) {

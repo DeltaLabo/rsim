@@ -1,8 +1,8 @@
 // Parameter file for the dB meter
 // These are in a separate file to avoid updating the versioned main.ino file just to change them
 
-#ifndef PARAMS_H
-#define PARAMS_H
+#ifndef SLM_PARAMS_H
+#define SLM_PARAMS_H
 
 // ESP models
 #define YD // XIAO or YD
