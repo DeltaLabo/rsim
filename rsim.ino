@@ -6,8 +6,8 @@
 #include <HardwareSerial.h>
 #include <esp_system.h>
 #include "time.h"
+#include "freertos/semphr.h"
 
-#include "rtc.h"
 #include "driver/i2s.h"
 #include "slm_params.h"
 #include "sos-iir-filter-xtensa.h"
@@ -32,36 +32,17 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 //            SD can be any pin, inlcuding input only pins (36-39).
 //            SCK (i.e. BCLK) and WS (i.e. L/R CLK) must be output capable pins
 
-#ifdef XIAO
-#define I2S_WS  D2
-#define I2S_SCK D3
-#define I2S_SD  D8
-#else
-#ifdef YD
-#define I2S_WS  13
-#define I2S_SCK 12
-#define I2S_SD  11
-#endif
-#endif
-
 // I2S peripheral to use (0 or 1)
 #define I2S_PORT          I2S_NUM_0
 
-#ifdef XIAO
-#define RED_LED_PIN D0 
-#define GREEN_LED_PIN D1
+#define GREEN_LED_CHANNEL 0
+#define RED_LED_CHANNEL 1
 #ifdef USE_BLUE_LED
-#define BLUE_LED_PIN D9
+#define BLUE_LED_CHANNEL 2
 #endif
-#else
-#ifdef YD
-#define RED_LED_PIN 21
-#define GREEN_LED_PIN 35
-#ifdef USE_BLUE_LED
-#define BLUE_LED_PIN 20
-#endif
-#endif
-#endif
+
+#define LED_PWM_FREQ 5000 // Hz
+#define LED_PWM_RES 8 // Bits
 
 // HardwareSerial for logging
 HardwareSerial HwSerial(0);
@@ -81,13 +62,24 @@ String success;
 
 typedef struct espnow_message {
   int currentColor;
+  TickType_t latency;
 } espnow_message;
 
 espnow_message localReadings;
 espnow_message incomingReadings;
 
+// Previous local color indication
+// Used to avoid setting the LEDs to the same color
+// they already were
+// Initialized to a null value
+int prevColor = -1;
+
 TickType_t lastReceivedTime = 0;
-int syncFailureCounter = 0;
+
+#ifdef ESPNOW_CLIENT
+int syncStatus = NORMAL;
+SemaphoreHandle_t xMutex;
+#endif
 
 esp_now_peer_info_t peerInfo;
 
@@ -178,13 +170,6 @@ SOS_IIR_Filter C_weighting = {
 #define DMA_BANK_SIZE     (SAMPLES_SHORT / 16)
 #define DMA_BANKS         32
 
-// Data pushed to 'samples_queue'
-struct sum_queue_t {
-  // Sum of squares of mic samples, after Equalizer filter
-  float sum_sqr_SPL;
-  // Sum of squares of weighted mic samples
-  float sum_sqr_weighted;
-};
 QueueHandle_t samples_queue;
 
 // Static buffer for block of samples
@@ -255,6 +240,18 @@ void mic_i2s_reader_task(void* parameter) {
   i2s_read(I2S_PORT, &samples, SAMPLES_SHORT * sizeof(int32_t), &bytes_read, portMAX_DELAY);
 
   while (true) {
+    #ifdef ESPNOW_CLIENT
+    xSemaphoreTake(xMutex, portMAX_DELAY);
+    if (syncStatus == FREEZE) {
+      xSemaphoreGive(xMutex);
+      vTaskDelay(incomingReadings.latency);
+      xSemaphoreTake(xMutex, portMAX_DELAY);
+      syncStatus = SYNCING;
+      xSemaphoreGive(xMutex);
+    }
+    else xSemaphoreGive(xMutex);
+    #endif
+
     // Block and wait for microphone values from I2S
     //
     // Data is moved from DMA buffers to our 'samples' buffer by the driver ISR
@@ -270,20 +267,19 @@ void mic_i2s_reader_task(void* parameter) {
     SAMPLE_T* int_samples = (SAMPLE_T*)&samples;
     for(int i=0; i<SAMPLES_SHORT; i++) samples[i] = MIC_CONVERT(int_samples[i]);
 
-    sum_queue_t q;
     // Apply DC blocker,
     // writes filtered samples back to the same buffer.
-    q.sum_sqr_SPL = DC_BLOCKER.filter(samples, samples, SAMPLES_SHORT);
+    float sum_sqr_weighted = DC_BLOCKER.filter(samples, samples, SAMPLES_SHORT);
 
     // Apply equalization and calculate Z-weighted sum of squares
-    q.sum_sqr_SPL = MIC_EQUALIZER.filter(samples, samples, SAMPLES_SHORT);
+    sum_sqr_weighted = MIC_EQUALIZER.filter(samples, samples, SAMPLES_SHORT);
 
     // Apply weighting and calculate weigthed sum of squares
-    q.sum_sqr_weighted = WEIGHTING.filter(samples, samples, SAMPLES_SHORT);
+    sum_sqr_weighted = WEIGHTING.filter(samples, samples, SAMPLES_SHORT);
 
     // Send the sums to FreeRTOS queue where main task will pick them up
     // and further calcualte decibel values (division, logarithms, etc...)
-    xQueueSend(samples_queue, &q, portMAX_DELAY);
+    xQueueSend(samples_queue, &sum_sqr_weighted, portMAX_DELAY);
   }
 }
 
@@ -355,7 +351,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 
 void leq_calculator_task(void* parameter) {
   // Queue object for microphone data
-  sum_queue_t q;
+  float sum_sqr_weighted;
   // Counter for the amount of samples read in a single measurement period
   uint32_t Leq_samples = 0;
   // Counter for the amount of samples read in a single logging period
@@ -376,15 +372,13 @@ void leq_calculator_task(void* parameter) {
   double Min_leq = MIC_OVERLOAD_DB + 1.0;
 
   // Read sum of samples, calculated by 'i2s_reader_task'
-  while (xQueueReceive(samples_queue, &q, portMAX_DELAY)) {
-    // Calculate dB values relative to MIC_REF_AMPL and adjust for microphone reference
-    double short_RMS = sqrt(double(q.sum_sqr_SPL) / SAMPLES_SHORT);
-    double short_SPL_dB = MIC_OFFSET_DB + MIC_REF_DB + 20 * log10(short_RMS / MIC_REF_AMPL);
-
-    // Accumulate Leq sum
-    Leq_sum_sqr += q.sum_sqr_weighted;
-    // Update the amount of samples read
-    Leq_samples += SAMPLES_SHORT;
+  while (true) {
+    if (QueueReceive(samples_queue, &sum_sqr_weighted, portMAX_DELAY)) {
+      // Accumulate Leq sum
+      Leq_sum_sqr += sum_sqr_weighted;
+      // Update the amount of samples read
+      Leq_samples += SAMPLES_SHORT;
+    }
 
     // When we gather enough samples, calculate new Leq value 
     if (Leq_samples >= SAMPLE_RATE * LEQ_PERIOD) {
@@ -424,7 +418,9 @@ void leq_calculator_task(void* parameter) {
         if (Logging_leq > MIC_OVERLOAD_DB) Logging_leq = MIC_OVERLOAD_DB;
         else if (Logging_leq < MIC_NOISE_DB) Logging_leq = MIC_NOISE_DB;
 
-        if (USE_THINGSPEAK == 1) logToThingSpeak(Logging_leq, Max_leq, Min_leq);
+        #ifdef USE_THINGSPEAK
+        logToThingSpeak(Logging_leq, Max_leq, Min_leq);
+        #endif
 
         // Reset the sum of squares and sample counter
         Logging_sum_sqr = 0;
@@ -438,6 +434,7 @@ void leq_calculator_task(void* parameter) {
       Leq_sum_sqr = 0;
       Leq_samples = 0;
 
+      #ifdef USE_ESPNOW
       // ESP-NOW comms
       esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &localReadings, sizeof(localReadings));
 
@@ -445,6 +442,10 @@ void leq_calculator_task(void* parameter) {
 
       vTaskDelay(pdMS_TO_TICKS(30));
       latency = xTaskGetTickCount() - lastReceivedTime;
+      if (latency > pdMS_TO_TICKS(LEQ_PERIOD * 1000.0)) {
+        lastReceivedTime = xTaskGetTickCount();
+        latency = latency - pdMS_TO_TICKS(LEQ_PERIOD * 1000.0);
+      }
 
       if (latency <= pdMS_TO_TICKS(MAX_LATENCY)) {
         HwSerial.print("[INFO] [ESPNOW]: Incoming reading received on time, Color: ");
@@ -452,128 +453,45 @@ void leq_calculator_task(void* parameter) {
         HwSerial.print(", Latency: ");
         HwSerial.println(latency);
 
-        syncFailureCounter = 0;
+        #ifdef ESPNOW_SERVER
+        // Clear latency measurement
+        localReadings.latency = 0;
+        #endif
 
         if (incomingReadings.currentColor > localReadings.currentColor)
         {
           setLEDColor(incomingReadings.currentColor);
         }
-        else{
+        else {
           setLEDColor(localReadings.currentColor);  
         }
       }
       else if (latency <= pdMS_TO_TICKS(SYNC_FAIL_LATENCY)) {
-        syncFailureCounter++;
-
-        if (syncFailureCounter >= MAX_SYNC_FAILURES) {
-          HwSerial.println("[ERROR] [ESPNOW]: Sync failures have exceeded the limit. Restarting ESP.");
-          restart_esp(NULL);
-        }
-
         HwSerial.print("[ERROR] [ESPNOW]: Incoming reading was not received on time, Color: ");
         HwSerial.print(incomingReadings.currentColor);
         HwSerial.print(", Latency: ");
         HwSerial.print(latency);
-        HwSerial.print(", Failures: ");
-        HwSerial.println(syncFailureCounter);
+
+        #ifdef ESPNOW_SERVER
+        localReadings.latency = latency;
+        #endif
 
         setLEDColor(localReadings.currentColor);
       }
       else {
-        HwSerial.print("[ERROR] [ESPNOW]: Did not receive any measurements. There doesn't seem to be another RSIM device active within range.");
+        HwSerial.println("[ERROR] [ESPNOW]: Did not receive any measurements. There doesn't seem to be another RSIM device active within range.");
+
+        #ifdef ESPNOW_SERVER
+        localReadings.latency = latency;
+        #endif
 
         setLEDColor(localReadings.currentColor);
       }
+
+      #else
+      setLEDColor(localReadings.currentColor);
+      #endif
     }
-  }
-}
-
-void restart_esp(TimerHandle_t xTimer) {
-  esp_restart();
-}
-
-void Update_RTC(TimerHandle_t xTimer) {
-  // Connect or reconnect to WiFi
-  if(WiFi.status() != WL_CONNECTED){
-    HwSerial.print("[INFO] [RTC]: Attempting to connect to WIFI...");
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    vTaskDelay(pdMS_TO_TICKS(300));
-  }
-
-  if (WiFi.status() == WL_CONNECTED){
-    // Init and get the time
-    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-
-    struct tm_bytes timeInfo;
-
-    if(getLocalTimeinBytes(&timeInfo)){
-      setDS3231time(
-        timeInfo.tm_sec,
-        timeInfo.tm_min,
-        timeInfo.tm_hour,
-        timeInfo.tm_wday,
-        timeInfo.tm_mday,
-        timeInfo.tm_mon,
-        timeInfo.tm_year
-      );
-      HwSerial.println("[INFO] [RTC]: RTC time updated.");
-    }
-    else HwSerial.println("[ERROR] [RTC]: Could not update RTC time.");
-  }
-  else HwSerial.println("[ERROR] [RTC]: Could not connect to WiFi.");
-}
-
-void awaitEvenSecond() {
-  HwSerial.println("[INFO] [RTC]: Awaiting even second...");
-  byte s0, s1;
-  // Initial time measurement
-  readDS3231seconds(&s0);
-
-  // Wait until next second change
-  do {
-    readDS3231seconds(&s1);
-  }
-  while(s0 == s1);
-  
-  // Wait until next even second
-  do {
-    readDS3231seconds(&s1);
-  }
-  while(s1 % 2 != 0);
-
-  HwSerial.println("[INFO] [RTC]: Ready to start.");
-}
-
-void RTC_update_handler_task(void* parameter) {
-  // Create a software timer for RTC updates
-  TimerHandle_t UpdateTimer = xTimerCreate("RTC Update Timer",      // Timer name
-                                      pdMS_TO_TICKS(RTC_UPDATE_PERIOD), // Timer period
-                                      pdTRUE,              // Auto-reload
-                                      NULL,                // Timer ID
-                                      Update_RTC);      // Callback function
-
-  if (UpdateTimer != NULL) {
-      // Start the timer
-      xTimerStart(UpdateTimer, 0);
-  }
-
-  // Create a software timer to restart the ESP32
-  TimerHandle_t RestartTimer = xTimerCreate("ESP32 Restart Timer",      // Timer name
-                                    pdMS_TO_TICKS(ESP32_RESTART_PERIOD), // Timer period
-                                    pdTRUE,              // Auto-reload
-                                    NULL,                // Timer ID
-                                    restart_esp);      // Callback function
-
-  if (RestartTimer != NULL) {
-      // Start the timer
-      xTimerStart(RestartTimer, 0);
-  }
-
-  // Task code can continue here...
-
-  // Task should not exit
-  while(true) {
-      vTaskDelay(pdMS_TO_TICKS(100)); // Delay for 100 milliseconds
   }
 }
 
@@ -592,36 +510,23 @@ void updateColor(float Leq_dB){
 
 // Update the LED color
 void setLEDColor(int color){
-  analogWrite(GREEN_LED_PIN, 0);
-  analogWrite(RED_LED_PIN, 0);
-  #ifdef USE_BLUE_LED
-  analogWrite(BLUE_LED_PIN, 0);
-  #endif
+  if (color != prevColor) {
+    prevColor = color;
+    ledcWrite(GREEN_LED_CHANNEL, 0);
+    ledcWrite(RED_LED_CHANNEL, 0);
+    #ifdef USE_BLUE_LED
+    ledcWrite(BLUE_LED_CHANNEL, 0);
+    #endif
 
-  if(color == RED){
-    for (int i = 0; i < 256; i++) {
-      analogWrite(RED_LED_PIN, rBright);
-      rBright +=1;
-      vTaskDelay(pdMS_TO_TICKS(fadeSpeed));
+    if(color == RED){
+      ledcWrite(RED_LED_CHANNEL, 255);
     }
-  }
-  else if(color == GREEN){
-    for (int i = 0; i < 256; i++) {
-      analogWrite(GREEN_LED_PIN, gBright);
-      gBright +=1;
-      vTaskDelay(pdMS_TO_TICKS(fadeSpeed));
-    }    
-  }
-  else { // color == YELLOW
-    for (int i = 0; i < 240; i++) {
-        analogWrite(RED_LED_PIN, rBright);
-        rBright +=1;
-        if(i<100){
-        analogWrite(GREEN_LED_PIN, gBright);
-        gBright +=1;
-        HwSerial.print(gBright);
-        }
-    vTaskDelay(pdMS_TO_TICKS(fadeSpeed));
+    else if(color == GREEN){
+      ledcWrite(GREEN_LED_CHANNEL, 255);
+    }
+    else { // color == YELLOW
+      ledcWrite(GREEN_LED_CHANNEL, 255);
+      ledcWrite(RED_LED_CHANNEL, 5);
     }
   }
 }
@@ -634,38 +539,43 @@ void setLEDColor(int color){
 //       the task to whichever core it happens to run on at the moment
 // 
 void setup() {
-  setCpuFrequencyMhz(230);
+  setCpuFrequencyMhz(240);  
 
-  pinMode(GREEN_LED_PIN, OUTPUT);
-  pinMode(RED_LED_PIN, OUTPUT);
+  // Set up ledc (PWM) channels
+  ledcSetup(GREEN_LED_CHANNEL, LED_PWM_FREQ, LED_PWM_RES);
+  ledcAttachPin(GREEN_LED_PIN, GREEN_LED_CHANNEL);
+  ledcSetup(RED_LED_CHANNEL, LED_PWM_FREQ, LED_PWM_RES);
+  ledcAttachPin(RED_LED_PIN, RED_LED_CHANNEL);
   #ifdef USE_BLUE_LED
-  pinMode(BLUE_LED_PIN, OUTPUT);
+  ledcSetup(BLUE_LED_CHANNEL, LED_PWM_FREQ, LED_PWM_RES);
+  ledcAttachPin(BLUE_LED_PIN, BLUE_LED_CHANNEL);
   #endif
 
-  #ifdef XIAO
-  Wire.begin(4, 5); // Xiao SDA, SCL
-  #else
-  #ifdef YD
-  Wire.begin(16, 17); // YD ESP32 SDA, SCL
-  #endif
-  #endif
+  Wire.begin(SDA_PIN, SCL_PIN);
+
+  HwSerial.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
 
   // Create FreeRTOS queue
   samples_queue = xQueueCreate(8, sizeof(sum_queue_t));
 
-  // Configure HwSerial on pins RX=D7, TX=D6
-  HwSerial.begin(115200, SERIAL_8N1, 7, 6);
+  #ifdef USE_THINGSPEAK
+  // Initialize the ThingSpeak object with the required WiFi client
+  ThingSpeak.begin(client);
+  #endif
 
-  if (USE_THINGSPEAK == 1) { 
-    // Initialize the ThingSpeak object with the required WiFi client
-    ThingSpeak.begin(client);
-  }
+  // Initialize latency to zero
+  localReadings.latency = 0;
+
+  xMutex = xSemaphoreCreateMutex();
 
   // Required to use IEEE 802.11 WiFi standard and ESPNOW
+  #if defined(USE_ESPNOW) || defined(USE_THINGSPEAK)
   WiFi.mode(WIFI_STA);
+  #endif
 
   int espnowInitCounter = 0;
 
+  #ifdef USE_ESPNOW
   // Init ESPNOW
   while (esp_now_init() != ESP_OK && espnowInitCounter < ESPNOW_MAX_INIT_FAILURES) {
     espnowInitCounter++;
@@ -675,7 +585,7 @@ void setup() {
 
   if (!(espnowInitCounter < ESPNOW_MAX_INIT_FAILURES)) {
     HwSerial.print("[ERROR] [ESPNOW]: ESP-NOW initialization failures have exceeded the limit. Restarting ESP. ");
-    restart_esp(NULL);
+    esp_restart();
   }
   else espnowInitCounter = 0;
 
@@ -692,16 +602,28 @@ void setup() {
   }
 
   if (!(espnowInitCounter < ESPNOW_MAX_INIT_FAILURES)) {
-    HwSerial.print("[ERROR] [ESPNOW]: ESP-NOW initialization failures have exceeded the limit. Restarting ESP. ");
-    restart_esp(NULL);
+    HwSerial.println("[ERROR] [ESPNOW]: ESP-NOW initialization failures have exceeded the limit. Restarting ESP. ");
+    esp_restart();
   }
   else espnowInitCounter = 0;
 
   // Register for a callback function that will be called when data is received
   esp_now_register_recv_cb(OnDataRecv);
+  #endif
 
-  // Create the RTC update task and pin it to the second core (ID=1)
-  xTaskCreatePinnedToCore(RTC_update_handler_task, "RTC update handler", RTC_TASK_STACK, NULL, RTC_TASK_PRI, NULL, 1);
+  #ifndef USE_ESPNOW
+  HwSerial.println("[INFO] [ESPNOW]: ESP-NOW is disabled.");
+  #else
+  #ifdef ESPNOW_SERVER
+  HwSerial.println("[INFO] [ESPNOW]: Role: Server.");
+  #else
+  HwSerial.println("[INFO] [ESPNOW]: Role: Client.");
+  #endif
+  #endif
+
+  #ifndef USE_THINGSPEAK
+  HwSerial.println("[INFO] [THINGSPEAK]: ThingSpeak logging is disabled.");
+  #endif
 
   // Create the mic reader task and pin it to the first core (ID=0)
   xTaskCreatePinnedToCore(mic_i2s_reader_task, "Mic I2S Reader", I2S_TASK_STACK, NULL, I2S_TASK_PRI, NULL, 0);
@@ -710,8 +632,6 @@ void setup() {
   xTaskCreatePinnedToCore(leq_calculator_task, "Leq Calculator", LEQ_TASK_STACK, NULL, LEQ_TASK_PRI, NULL, 1);
   
   vTaskDelay(pdMS_TO_TICKS(1000)); // Safety
-  Update_RTC(NULL);
-  awaitEvenSecond();
 }
 
 void loop() {

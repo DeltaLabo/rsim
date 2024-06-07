@@ -5,7 +5,7 @@
 #define SLM_PARAMS_H
 
 // ESP models
-#define YD // XIAO or YD
+#define YD// XIAO or YD
 
 // Periods
 #define LOGGING_PERIOD 64.0 // second(s)
@@ -17,6 +17,14 @@
 #define MAX_SYNC_FAILURES 200
 
 #define ESPNOW_MAX_INIT_FAILURES 10
+
+// Uncomment to make the RSIM unit synchronize other client units
+#define ESPNOW_SERVER
+
+// Comment the above define to let the RSIM unit be synchronized by the server unit
+#ifndef ESPNOW_SERVER
+#define ESPNOW_CLIENT
+#endif
 
 // WiFi parameters
 #define WIFI_SSID "LaboratorioDelta"
@@ -40,6 +48,10 @@ const uint8_t broadcastAddress[] = {0x48, 0x27, 0xE2, 0xE6, 0xDC, 0x84}; // For 
 #define YELLOW 1
 #define GREEN 0
 
+#define NORMAL 0
+#define FREEZE 1
+#define SYNCING 2
+
 // Comment to leave BLUE_LED_PIN unused
 //#define USE_BLUE_LED
 
@@ -47,8 +59,9 @@ const uint8_t broadcastAddress[] = {0x48, 0x27, 0xE2, 0xE6, 0xDC, 0x84}; // For 
 // Configuration
 //
 
-// Set to 1/0 to enable/disable ThingSpeak logging
-#define USE_THINGSPEAK 1
+// Comment to disable functionality
+#define USE_THINGSPEAK
+#define USE_ESPNOW
 
 #define LEQ_PERIOD        2.0      // second(s)
 #define WEIGHTING         A_weighting // 'A_weighting' 'C_weighting' or 'None' (Z_weighting)
