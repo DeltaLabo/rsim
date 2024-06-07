@@ -240,7 +240,7 @@ void mic_i2s_reader_task(void* parameter) {
   i2s_read(I2S_PORT, &samples, SAMPLES_SHORT * sizeof(int32_t), &bytes_read, portMAX_DELAY);
 
   while (true) {
-    #ifdef ESPNOW_CLIENT
+    #if defined(USE_ESPNOW) && defined(ESPNOW_CLIENT)
     xSemaphoreTake(xMutex, portMAX_DELAY);
     if (syncStatus == FREEZE) {
       xSemaphoreGive(xMutex);

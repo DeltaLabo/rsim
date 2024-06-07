@@ -61,7 +61,7 @@ const uint8_t broadcastAddress[] = {0x48, 0x27, 0xE2, 0xE6, 0xDC, 0x84}; // For 
 
 // Comment to disable functionality
 #define USE_THINGSPEAK
-#define USE_ESPNOW
+//#define USE_ESPNOW
 
 #define LEQ_PERIOD        2.0      // second(s)
 #define WEIGHTING         A_weighting // 'A_weighting' 'C_weighting' or 'None' (Z_weighting)
