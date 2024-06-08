@@ -8,7 +8,7 @@
 #define YD// XIAO or YD
 
 // Periods
-#define LOGGING_PERIOD 64.0 // second(s)
+#define LOGGING_PERIOD 16.0 // second(s)
 #define RTC_UPDATE_PERIOD 3600000 // millisecond(s), 1 hour
 #define ESP32_RESTART_PERIOD 86400000 // milliseconds(s), 24 hours
 
@@ -60,7 +60,7 @@ const uint8_t broadcastAddress[] = {0x48, 0x27, 0xE2, 0xE6, 0xDC, 0x84}; // For 
 //
 
 // Comment to disable functionality
-#define USE_THINGSPEAK
+//#define USE_THINGSPEAK
 //#define USE_ESPNOW
 
 #define LEQ_PERIOD        2.0      // second(s)

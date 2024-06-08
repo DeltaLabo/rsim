@@ -11,6 +11,7 @@
 #include "driver/i2s.h"
 #include "slm_params.h"
 #include "sos-iir-filter-xtensa.h"
+#include "pins.h"
 
 // Equalizer used to flatten the microphone's frequency response
 #define MIC_EQUALIZER     INMP441
@@ -34,15 +35,6 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 
 // I2S peripheral to use (0 or 1)
 #define I2S_PORT          I2S_NUM_0
-
-#define GREEN_LED_CHANNEL 0
-#define RED_LED_CHANNEL 1
-#ifdef USE_BLUE_LED
-#define BLUE_LED_CHANNEL 2
-#endif
-
-#define LED_PWM_FREQ 5000 // Hz
-#define LED_PWM_RES 8 // Bits
 
 // HardwareSerial for logging
 HardwareSerial HwSerial(0);
@@ -373,7 +365,7 @@ void leq_calculator_task(void* parameter) {
 
   // Read sum of samples, calculated by 'i2s_reader_task'
   while (true) {
-    if (QueueReceive(samples_queue, &sum_sqr_weighted, portMAX_DELAY)) {
+    if (xQueueReceive(samples_queue, &sum_sqr_weighted, portMAX_DELAY)) {
       // Accumulate Leq sum
       Leq_sum_sqr += sum_sqr_weighted;
       // Update the amount of samples read
@@ -512,21 +504,21 @@ void updateColor(float Leq_dB){
 void setLEDColor(int color){
   if (color != prevColor) {
     prevColor = color;
-    ledcWrite(GREEN_LED_CHANNEL, 0);
-    ledcWrite(RED_LED_CHANNEL, 0);
-    #ifdef USE_BLUE_LED
-    ledcWrite(BLUE_LED_CHANNEL, 0);
+    digitalWrite(GREEN_LED_PIN, HIGH);
+    digitalWrite(RED_LED_PIN, HIGH);
+    #ifdef USE_BLUE_LED+
+    digitalWrite(BLUE_LED_PIN, HIGH);
     #endif
 
     if(color == RED){
-      ledcWrite(RED_LED_CHANNEL, 255);
+      digitalWrite(RED_LED_PIN, LOW);
     }
     else if(color == GREEN){
-      ledcWrite(GREEN_LED_CHANNEL, 255);
+      digitalWrite(GREEN_LED_PIN, LOW);
     }
     else { // color == YELLOW
-      ledcWrite(GREEN_LED_CHANNEL, 255);
-      ledcWrite(RED_LED_CHANNEL, 5);
+      digitalWrite(GREEN_LED_PIN, LOW);
+      digitalWrite(RED_LED_PIN, LOW);
     }
   }
 }
@@ -541,24 +533,33 @@ void setLEDColor(int color){
 void setup() {
   setCpuFrequencyMhz(240);  
 
-  // Set up ledc (PWM) channels
-  ledcSetup(GREEN_LED_CHANNEL, LED_PWM_FREQ, LED_PWM_RES);
-  ledcAttachPin(GREEN_LED_PIN, GREEN_LED_CHANNEL);
-  ledcSetup(RED_LED_CHANNEL, LED_PWM_FREQ, LED_PWM_RES);
-  ledcAttachPin(RED_LED_PIN, RED_LED_CHANNEL);
+  pinMode(GREEN_LED_PIN, OUTPUT);
+  pinMode(RED_LED_PIN, OUTPUT);
   #ifdef USE_BLUE_LED
-  ledcSetup(BLUE_LED_CHANNEL, LED_PWM_FREQ, LED_PWM_RES);
-  ledcAttachPin(BLUE_LED_PIN, BLUE_LED_CHANNEL);
+  pinMode(BLUE_LED_PIN, OUTPUT);
   #endif
-
-  Wire.begin(SDA_PIN, SCL_PIN);
 
   HwSerial.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
 
   // Create FreeRTOS queue
-  samples_queue = xQueueCreate(8, sizeof(sum_queue_t));
+  samples_queue = xQueueCreate(8, sizeof(float));
+
+  // Required to use IEEE 802.11 WiFi standard and ESPNOW
+  #if defined(USE_ESPNOW) || defined(USE_THINGSPEAK)
+  WiFi.mode(WIFI_STA);
+  #endif
 
   #ifdef USE_THINGSPEAK
+  // Connect or reconnect to WiFi
+  if(WiFi.status() != WL_CONNECTED){
+    HwSerial.println("[INFO] [THINGSPEAK]: Attempting to connect to WIFI...");
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    vTaskDelay(pdMS_TO_TICKS(5000));
+  }
+
+  if (WiFi.status() == WL_CONNECTED) HwSerial.println("[INFO] [THINGSPEAK]: Connected to WiFi.");
+  else HwSerial.println("[ERROR] [THINGSPEAK]: Could not connect to WiFi.");
+
   // Initialize the ThingSpeak object with the required WiFi client
   ThingSpeak.begin(client);
   #endif
@@ -566,12 +567,10 @@ void setup() {
   // Initialize latency to zero
   localReadings.latency = 0;
 
+  #if defined(USE_ESPNOW) && defined(ESPNOW_CLIENT)
   xMutex = xSemaphoreCreateMutex();
-
-  // Required to use IEEE 802.11 WiFi standard and ESPNOW
-  #if defined(USE_ESPNOW) || defined(USE_THINGSPEAK)
-  WiFi.mode(WIFI_STA);
   #endif
+
 
   int espnowInitCounter = 0;
 
