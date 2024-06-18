@@ -23,10 +23,10 @@
 #endif
 #else
 #ifdef YD
-#define RED_LED_PIN 21
-#define GREEN_LED_PIN 35
+#define RED_LED_PIN 15
+#define GREEN_LED_PIN 16
 #ifdef USE_BLUE_LED
-#define BLUE_LED_PIN 20
+#define BLUE_LED_PIN 17
 #endif
 #endif
 #endif
