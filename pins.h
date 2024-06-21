@@ -23,21 +23,11 @@
 #endif
 #else
 #ifdef YD
-#define RED_LED_PIN 15
-#define GREEN_LED_PIN 16
+#define RED_LED_PIN 21//15
+#define GREEN_LED_PIN 35//16
 #ifdef USE_BLUE_LED
 #define BLUE_LED_PIN 17
 #endif
-#endif
-#endif
-
-#ifdef XIAO
-#define RX_PIN D7
-#define TX_PIN D6
-#else
-#ifdef YD
-#define RX_PIN 44
-#define TX_PIN 43
 #endif
 #endif
 
