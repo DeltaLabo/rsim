@@ -48,6 +48,16 @@ const uint8_t broadcastAddress[] = {0x48, 0x27, 0xE2, 0xE6, 0xDC, 0x84}; // For 
 #define YELLOW 1
 #define GREEN 0
 
+// ledc channels
+#define RED_LED_CHANNEL 0
+#define GREEN_LED_CHANNEL 1
+#ifdef USE_BLUE_LED
+#define BLUE_LED_CHANNEL 2
+#endif
+
+#define LEDC_FREQ 5000 // Hz
+#define LEDC_RESOLUTION 8 // bits
+
 #define NORMAL 0
 #define FREEZE 1
 #define SYNCING 2

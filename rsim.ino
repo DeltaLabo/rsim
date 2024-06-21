@@ -504,21 +504,28 @@ void updateColor(float Leq_dB){
 void setLEDColor(int color){
   if (color != prevColor) {
     prevColor = color;
-    digitalWrite(GREEN_LED_PIN, HIGH);
-    digitalWrite(RED_LED_PIN, HIGH);
-    #ifdef USE_BLUE_LED+
-    digitalWrite(BLUE_LED_PIN, HIGH);
+    //digitalWrite(GREEN_LED_PIN, HIGH);
+    ledcWrite(GREEN_LED_CHANNEL, 255);
+    //digitalWrite(RED_LED_PIN, HIGH);
+    ledcWrite(RED_LED_CHANNEL, 255);
+    #ifdef USE_BLUE_LED
+    //digitalWrite(BLUE_LED_PIN, HIGH);
+    ledcWrite(BLUE_LED_CHANNEL, 255);
     #endif
 
     if(color == RED){
-      digitalWrite(RED_LED_PIN, LOW);
+      //digitalWrite(RED_LED_PIN, LOW);
+      ledcWrite(RED_LED_CHANNEL, 0);
     }
     else if(color == GREEN){
-      digitalWrite(GREEN_LED_PIN, LOW);
+      //digitalWrite(GREEN_LED_PIN, LOW);
+      ledcWrite(GREEN_LED_CHANNEL, 0);
     }
     else { // color == YELLOW
-      digitalWrite(GREEN_LED_PIN, LOW);
-      digitalWrite(RED_LED_PIN, LOW);
+      //digitalWrite(GREEN_LED_PIN, LOW);
+      ledcWrite(GREEN_LED_CHANNEL, 100);
+      //digitalWrite(RED_LED_PIN, LOW);
+      ledcWrite(RED_LED_CHANNEL, 0);
     }
   }
 }
@@ -533,11 +540,27 @@ void setLEDColor(int color){
 void setup() {
   setCpuFrequencyMhz(240);  
 
+  // ledc (PWM) frequency and resolution setup
+  ledcSetup(RED_LED_CHANNEL, LEDC_FREQ, LEDC_RESOLUTION);
+  ledcSetup(GREEN_LED_CHANNEL, LEDC_FREQ, LEDC_RESOLUTION);
+  #ifdef USE_BLUE_LED
+  ledcSetup(BLUE_LED_CHANNEL, LEDC_FREQ, LEDC_RESOLUTION);
+  #endif
+
+  // ledc (PWM) pin setup
+  ledcAttachPin(RED_LED_PIN, RED_LED_CHANNEL);
+  ledcAttachPin(GREEN_LED_PIN, GREEN_LED_CHANNEL);
+  #ifdef USE_BLUE_LED
+  ledcAttachPin(BLUE_LED_PIN, BLUE_LED_CHANNEL);
+  #endif
+
+  /*
   pinMode(GREEN_LED_PIN, OUTPUT);
   pinMode(RED_LED_PIN, OUTPUT);
   #ifdef USE_BLUE_LED
   pinMode(BLUE_LED_PIN, OUTPUT);
   #endif
+  */
 
   HwSerial.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
 
