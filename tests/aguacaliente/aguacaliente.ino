@@ -10,8 +10,8 @@
 #define GREEN 0
 
 // For Xiao
-#define RED_LED_PIN D0 // D0
-#define GREEN_LED_PIN D1 // D1
+#define RED_LED_PIN 33 // D0
+#define GREEN_LED_PIN 32 // D1
 
 // For YD-ESP32
 /*
@@ -49,14 +49,9 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 //            SD can be any pin, inlcuding input only pins (36-39).
 //            SCK (i.e. BCLK) and WS (i.e. L/R CLK) must be output capable pins
 
-#define I2S_WS  D2
-#define I2S_SCK D3
-#define I2S_SD  D8
-/*
-#define I2S_WS  13
-#define I2S_SCK 12
-#define I2S_SD  11
-*/
+#define I2S_SD  15
+#define I2S_SCK 2
+#define I2S_WS  4
 
 // I2S peripheral to use (0 or 1)
 #define I2S_PORT          I2S_NUM_0
@@ -302,7 +297,7 @@ void leq_calculator_task(void* parameter) {
       if (Leq_dB < Min_leq) Min_leq = Leq_dB;
       if (Leq_dB > Max_leq) Max_leq = Leq_dB;
 
-      updateColor(Leq_dB);
+      //updateColor(Leq_dB);
       
       // If Serial logging was selected, print the value to HardwareSerial
       if (LOG_MODE == SERIAL || LOG_MODE == WIFI_PLUS_SERIAL) {
@@ -369,7 +364,7 @@ void updateColor(float Leq_dB){
 //       the task to whichever core it happens to run on at the moment
 // 
 void setup() {
-  setCpuFrequencyMhz(230);
+  setCpuFrequencyMhz(240);
 
   // Create FreeRTOS queue
   samples_queue = xQueueCreate(8, sizeof(sum_queue_t));
