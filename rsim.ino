@@ -502,9 +502,7 @@ void setLEDColor(int color){
     prevColor = color;
     ledcWrite(GREEN_LED_CHANNEL, 255);
     ledcWrite(RED_LED_CHANNEL, 255);
-    #ifdef USE_BLUE_LED
     ledcWrite(BLUE_LED_CHANNEL, 255);
-    #endif
 
     if(color == RED){
       ledcWrite(RED_LED_CHANNEL, 0);
@@ -532,16 +530,12 @@ void setup() {
   // ledc (PWM) frequency and resolution setup
   ledcSetup(RED_LED_CHANNEL, LEDC_FREQ, LEDC_RESOLUTION);
   ledcSetup(GREEN_LED_CHANNEL, LEDC_FREQ, LEDC_RESOLUTION);
-  #ifdef USE_BLUE_LED
   ledcSetup(BLUE_LED_CHANNEL, LEDC_FREQ, LEDC_RESOLUTION);
-  #endif
 
   // ledc (PWM) pin setup
   ledcAttachPin(RED_LED_PIN, RED_LED_CHANNEL);
   ledcAttachPin(GREEN_LED_PIN, GREEN_LED_CHANNEL);
-  #ifdef USE_BLUE_LED
   ledcAttachPin(BLUE_LED_PIN, BLUE_LED_CHANNEL);
-  #endif
 
   // Init serial for logging
   Serial.begin(115200);

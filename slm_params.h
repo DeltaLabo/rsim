@@ -4,9 +4,6 @@
 #ifndef SLM_PARAMS_H
 #define SLM_PARAMS_H
 
-// ESP models
-#define YD// XIAO or YD
-
 // Periods
 #define LOGGING_PERIOD 16.0 // second(s)
 #define RTC_UPDATE_PERIOD 3600000 // millisecond(s), 1 hour
@@ -34,14 +31,8 @@
 #define WRITE_API_KEY "CLXSWMD66IFK7PO4"
 #define CHANNEL_NUMBER 2363548
 
-#ifdef XIAO
 // ESPNOW MAC addresses
-const uint8_t broadcastAddress[] = {0xC0, 0x4E, 0x30, 0x3A, 0x03, 0x34}; // For Xiao
-#else
-#ifdef YD
 const uint8_t broadcastAddress[] = {0x48, 0x27, 0xE2, 0xE6, 0xDC, 0x84}; // For YD
-#endif
-#endif
 
 // Indicator color definitions
 #define RED 2
@@ -51,9 +42,7 @@ const uint8_t broadcastAddress[] = {0x48, 0x27, 0xE2, 0xE6, 0xDC, 0x84}; // For 
 // ledc channels
 #define RED_LED_CHANNEL 0
 #define GREEN_LED_CHANNEL 1
-#ifdef USE_BLUE_LED
 #define BLUE_LED_CHANNEL 2
-#endif
 
 #define LEDC_FREQ 5000 // Hz
 #define LEDC_RESOLUTION 8 // bits
@@ -61,9 +50,6 @@ const uint8_t broadcastAddress[] = {0x48, 0x27, 0xE2, 0xE6, 0xDC, 0x84}; // For 
 #define NORMAL 0
 #define FREEZE 1
 #define SYNCING 2
-
-// Comment to leave BLUE_LED_PIN unused
-//#define USE_BLUE_LED
 
 //
 // Configuration
