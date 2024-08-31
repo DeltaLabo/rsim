@@ -48,7 +48,7 @@ const uint8_t broadcastAddress[] = {0x48, 0x27, 0xE2, 0xE6, 0xDC, 0x84}; // For 
 //
 
 // Comment to disable functionality
-//#define USE_THINGSPEAK
+//#define USE_LOGGING
 #define USE_ESPNOW
 //#define USE_RTC
 

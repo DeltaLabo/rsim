@@ -459,7 +459,7 @@ void leq_calculator_task(void* parameter) {
         if (Logging_leq > MIC_OVERLOAD_DB) Logging_leq = MIC_OVERLOAD_DB;
         else if (Logging_leq < MIC_NOISE_DB) Logging_leq = MIC_NOISE_DB;
 
-        #ifdef USE_THINGSPEAK
+        #ifdef USE_LOGGING
         logToThingSpeak(Logging_leq, Max_leq, Min_leq);
         #endif
 
@@ -689,13 +689,13 @@ void setup() {
   // Create FreeRTOS queue
   samples_queue = xQueueCreate(8, sizeof(sum_queue_t));
 
-  #ifdef USE_THINGSPEAK
+  #ifdef USE_LOGGING
   // Initialize the ThingSpeak object with the required WiFi client
   ThingSpeak.begin(client);
   #endif
 
   // Required to use IEEE 802.11 WiFi standard and ESPNOW
-  #if defined(USE_ESPNOW) || defined(USE_THINGSPEAK)
+  #if defined(USE_ESPNOW) || defined(USE_LOGGING)
   HwSerial.println("before");
   WiFi.mode(WIFI_STA);
   HwSerial.println("after");
@@ -752,7 +752,7 @@ void setup() {
   HwSerial.println("[INFO] [ESPNOW]: ESP-NOW is disabled.");
   #endif
 
-  #ifndef USE_THINGSPEAK
+  #ifndef USE_LOGGING
   HwSerial.println("[INFO] [THINGSPEAK]: ThingSpeak logging is disabled.");
   #endif
 
