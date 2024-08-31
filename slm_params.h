@@ -7,7 +7,8 @@
 // Periods
 #define LOGGING_PERIOD 16.0 // second(s)
 #define RTC_UPDATE_PERIOD 3600000 // millisecond(s), 1 hour
-#define ESP32_RESTART_PERIOD 86400000 // milliseconds(s), 24 hours
+#define ESP32_RESTART_PERIOD 86400000 // millisecond(s), 24 hours
+#define BATTERY_CHECK_PERIOD 60000 // millisecond(s), 1 minute
 
 #define MAX_LATENCY 200 // millisecond(s)
 #define SYNC_FAIL_LATENCY 2100 // millisecond(s)
@@ -47,16 +48,26 @@ const uint8_t broadcastAddress[] = {0x48, 0x27, 0xE2, 0xE6, 0xDC, 0x84}; // For 
 #define LEDC_FREQ 5000 // Hz
 #define LEDC_RESOLUTION 8 // bits
 
+// ESP-NOW sync states
 #define NORMAL 0
 #define FREEZE 1
 #define SYNCING 2
+
+// Power states
+#define LOW_BATTERY 0
+#define ENOUGH_BATTERY 1
+#define CHARGING 2
+
+// Power constants
+#define MIN_CHARGING_CURRENT 200 // mA
+#define MIN_CHARGED_VOLTAGE 12.8 // V
 
 //
 // Configuration
 //
 
 // Comment to disable functionality
-//#define USE_THINGSPEAK
+//#define USE_LOGGING
 //#define USE_ESPNOW
 
 #define LEQ_PERIOD        2.0      // second(s)

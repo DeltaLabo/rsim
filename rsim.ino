@@ -6,6 +6,9 @@
 #include <esp_system.h>
 #include "time.h"
 #include "freertos/semphr.h"
+#include <Wire.h>
+#include <Adafruit_INA219.h>
+
 
 #include "driver/i2s.h"
 #include "slm_params.h"
@@ -46,7 +49,7 @@ short logFlag = 0;
 int thingSpeakErrorCode;
 
 // Variable to store ESPNOW data transmission result
-String success;
+String espnowSuccess;
 
 typedef struct espnow_message {
   int currentColor;
@@ -62,6 +65,7 @@ espnow_message incomingReadings;
 // Initialized to a null value
 int prevColor = -1;
 
+// ESP-NOW last packet reception timestamp
 TickType_t lastReceivedTime = 0;
 
 #ifdef ESPNOW_CLIENT
@@ -71,11 +75,10 @@ SemaphoreHandle_t xMutex;
 
 esp_now_peer_info_t peerInfo;
 
-int brightness = 255;
-int gBright = 0;
-int rBright = 0;
-int bBright = 0;
-int fadeSpeed = 5;
+// Battery voltage and current meter
+Adafruit_INA219 ina219;
+
+short batteryState = ENOUGH_BATTERY;
 
 //
 // IIR Filters
@@ -217,8 +220,8 @@ void mic_i2s_init() {
 #define I2S_TASK_STACK 2048
 #define LEQ_TASK_PRI   3
 #define LEQ_TASK_STACK 8096
-#define RTC_TASK_PRI 1
-#define RTC_TASK_STACK 2048
+#define BAT_TASK_PRI 1
+#define BAT_TASK_STACK 2048
 
 void mic_i2s_reader_task(void* parameter) {
   mic_i2s_init();
@@ -406,7 +409,7 @@ void leq_calculator_task(void* parameter) {
         if (Logging_leq > MIC_OVERLOAD_DB) Logging_leq = MIC_OVERLOAD_DB;
         else if (Logging_leq < MIC_NOISE_DB) Logging_leq = MIC_NOISE_DB;
 
-        #ifdef USE_THINGSPEAK
+        #ifdef USE_LOGGING
         logToThingSpeak(Logging_leq, Max_leq, Min_leq);
         #endif
 
@@ -483,6 +486,40 @@ void leq_calculator_task(void* parameter) {
   }
 }
 
+void battery_checker_task(void* parameter) {
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+  float shuntvoltage = 0;
+  float busvoltage = 0;
+  float current_mA = 0;
+  float loadvoltage = 0;
+
+  while (true) {
+    shuntvoltage = ina219.getShuntVoltage_mV();
+    busvoltage = ina219.getBusVoltage_V();
+    loadvoltage = busvoltage + (shuntvoltage / 1000);
+    current_mA = ina219.getCurrent_mA();
+
+    if (current_mA > MIN_CHARGING_CURRENT) {
+      batteryState = CHARGING;
+      // Turn on charging indicator LED
+      digitalWrite(CHARGER_LED_PIN, LOW);
+      Serial.println("[INFO] [POWER]: The battery is charging.");
+    } else if (loadvoltage > MIN_CHARGED_VOLTAGE) {
+      batteryState = ENOUGH_BATTERY;
+      // Turn off charging indicator LED
+      digitalWrite(CHARGER_LED_PIN, HIGH);
+      Serial.println("[INFO] [POWER]: The battery is charged.");
+    } else{
+      batteryState = LOW_BATTERY;
+      // Turn on charging indicator LED
+      digitalWrite(CHARGER_LED_PIN, LOW);
+      Serial.println("[WARNING] [POWER]: The battery voltage is low.");
+    }
+
+    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(BATTERY_CHECK_PERIOD));
+  }
+}
+
 // Update the color indication based on the Leq value
 void updateColor(float Leq_dB){
   if (Leq_dB < GREEN_UPPER_LIMIT) {
@@ -540,15 +577,25 @@ void setup() {
   // Init serial for logging
   Serial.begin(115200);
 
+  Wire.begin(INA_SDA, INA_SCL); // SDA, SCL
+
+  // Initialize the INA219.
+  // By default the initialization will use the largest range (32V, 2A).  However
+  // you can call a setCalibration function to change this range (see comments).
+  if (!ina219.begin()) {
+    Serial.println("[ERROR] [POWER]: Failed to find INA219 chip.");
+    #define NO_INA
+  }
+
   // Create FreeRTOS queue
   samples_queue = xQueueCreate(8, sizeof(float));
 
   // Required to use IEEE 802.11 WiFi standard and ESPNOW
-  #if defined(USE_ESPNOW) || defined(USE_THINGSPEAK)
+  #if defined(USE_ESPNOW) || defined(USE_LOGGING)
   WiFi.mode(WIFI_STA);
   #endif
 
-  #ifdef USE_THINGSPEAK
+  #ifdef USE_LOGGING
   // Connect or reconnect to WiFi
   if(WiFi.status() != WL_CONNECTED){
     Serial.println("[INFO] [THINGSPEAK]: Attempting to connect to WIFI...");
@@ -619,8 +666,16 @@ void setup() {
   #endif
   #endif
 
-  #ifndef USE_THINGSPEAK
+  #ifndef USE_LOGGING
   Serial.println("[INFO] [THINGSPEAK]: ThingSpeak logging is disabled.");
+  #endif
+
+  pinMode(CHARGER_LED_PIN, OUTPUT);
+  // Turn off charging indicator LED
+  digitalWrite(CHARGER_LED_PIN, HIGH);
+
+  #ifndef NO_INA
+  xTaskCreatePinnedToCore(battery_checker_task, "Battery Checker", BAT_TASK_STACK, NULL, BAT_TASK_PRI, NULL, 1);
   #endif
 
   // Create the mic reader task and pin it to the first core (ID=0)
