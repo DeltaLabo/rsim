@@ -1,5 +1,6 @@
 Room sound intensity meter
 ============
+## DeltaLAB - Instituto Tecnológico de Costa Rica
 
 ### What is this repository for?
 
