@@ -20,7 +20,7 @@ Room sound intensity meter
 * Install Git
 * Install Arduino IDE
 * Follow these [instructions](https://docs.espressif.com/projects/arduino-esp32/en/latest/installing.html) to set up the ESP32-S3 in the Arduino IDE
-* Connect the components as shown in the diagram found in `schematic_diagram.pdf`
+* Connect the components as shown in the diagram found in [`schematic_diagram.pdf`](https://github.com/DeltaLabo/rsim/blob/main/schematic_diagram.pdf)
 
 * Clone this repo and upload `main.ino` to the ESP32
 
