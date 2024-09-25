@@ -3,14 +3,12 @@ Room sound intensity meter
 
 ### What is this repository for?
 
-* This repository was created to develop an ESP32-based ambient noise level meter, that can send alerts via instant messaging.
+* This repository was created to develop an ESP32-based ambient noise level meter.
 
 ### Microcontroller info
 
-* Model: Seeed Studio XIAO ESP32C3
-* [Documentation page](https://wiki.seeedstudio.com/XIAO_ESP32C3_Getting_Started/)
-* [Pinout diagram](https://files.seeedstudio.com/wiki/XIAO_WiFi/pin_map-2.png)
-* [ESP32 datasheet](https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf)
+* Model: ESP32-S3 DevKit-C1 
+* [Documentation page](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/hw-reference/esp32s3/user-guide-devkitc-1.html)
 
 ### Microphone info
 
@@ -21,24 +19,10 @@ Room sound intensity meter
 
 * Install Git
 * Install Arduino IDE
-* Follow these [instructions](https://wiki.seeedstudio.com/XIAO_ESP32C3_Getting_Started/#getting-started) to set up the XIAO ESP32 in the Arduino IDE
-* Connect the components as shown in this diagram
-
-![Connection diagram for the XIAO ESP32C3 microcontroller and the INMP441 digital microphopne.](./connection_diagram.png)
+* Follow these [instructions](https://docs.espressif.com/projects/arduino-esp32/en/latest/installing.html) to set up the ESP32-S3 in the Arduino IDE
+* Connect the components as shown in the diagram found in `schematic_diagram.pdf`
 
 * Clone this repo and upload `main.ino` to the ESP32
-
-### Troubleshooting
-
-#### The error `A fatal error occurred: No serial data received.` shows when trying to upload via Arduino IDE.
-
-1. While holding the `B` button on the ESP32, press the `R` button.
-1. Release the `R` button, and then `B`.
-1. Re-upload the code.
-
-#### The code was successfully uploaded, but the programmer is stuck in `Hard resetting via RTS pin...`.
-
-- Press the `R` button once. The code should now be running.
 
 ### Contribution guidelines ###
 
@@ -48,3 +32,5 @@ Room sound intensity meter
 ### Who do I talk to? ###
 
 * [Juan J. Rojas](mailto:juan.rojas@itcr.ac.cr)
+* [Anthony Arguedas](mailto:antarguedas@estudiantec.r)
+* [Josué Morera](mailto:josuemr0106@estudiantec.cr)
