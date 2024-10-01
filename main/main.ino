@@ -1,15 +1,16 @@
-#include <Arduino.h>
-#include <cstring>
-#include "time.h"
+//#include <Arduino.h>
+//#include <cstring>
+//#include "time.h"
 #include "freertos/semphr.h"
+#include <esp_system.h>
+#include "driver/i2s.h"
+#include "driver/ledc.h"
 #include <Wire.h>
 #include <Adafruit_INA219.h>
 
-
-#include "driver/i2s.h"
 #include "slm_params.h"
-#include "sos-iir-filter-xtensa.h"
 #include "pins.h"
+#include "sos-iir-filter-xtensa.h"
 
 // Equalizer used to flatten the microphone's frequency response
 #define MIC_EQUALIZER     INMP441
@@ -198,18 +199,6 @@ void mic_i2s_reader_task(void* parameter) {
   i2s_read(I2S_PORT, &samples, SAMPLES_SHORT * sizeof(int32_t), &bytes_read, portMAX_DELAY);
 
   while (true) {
-    #if defined(USE_ESPNOW) && defined(ESPNOW_CLIENT)
-    xSemaphoreTake(xMutex, portMAX_DELAY);
-    if (syncStatus == FREEZE) {
-      xSemaphoreGive(xMutex);
-      vTaskDelay(incomingReadings.latency);
-      xSemaphoreTake(xMutex, portMAX_DELAY);
-      syncStatus = SYNCING;
-      xSemaphoreGive(xMutex);
-    }
-    else xSemaphoreGive(xMutex);
-    #endif
-
     // Block and wait for microphone values from I2S
     //
     // Data is moved from DMA buffers to our 'samples' buffer by the driver ISR
