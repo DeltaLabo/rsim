@@ -1,19 +1,10 @@
-#include <WiFi.h>
-#include <ThingSpeak.h>
-#include <Arduino.h>
-#include <cstring>
-#include <esp_now.h>
-#include <esp_system.h>
-#include "time.h"
-#include "freertos/semphr.h"
+#include "driver/i2s.h"
 #include <Wire.h>
 #include <Adafruit_INA219.h>
 
-
-#include "driver/i2s.h"
 #include "slm_params.h"
-#include "sos-iir-filter-xtensa.h"
 #include "pins.h"
+#include "sos-iir-filter-xtensa.h"
 
 // Equalizer used to flatten the microphone's frequency response
 #define MIC_EQUALIZER     INMP441
@@ -38,42 +29,13 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 // I2S peripheral to use (0 or 1)
 #define I2S_PORT          I2S_NUM_0
 
-// WiFi client used for ThingSpeak logging
-WiFiClient  client;
-
-// Flag to determine when to log measurements
-// Works as a counter of how many SLM periods have passed from the last logging event
-short logFlag = 0;
-
-// Variable to store the ThingSpeak error code returned after sending data
-int thingSpeakErrorCode;
-
-// Variable to store ESPNOW data transmission result
-String espnowSuccess;
-
-typedef struct espnow_message {
-  int currentColor;
-  TickType_t latency;
-} espnow_message;
-
-espnow_message localReadings;
-espnow_message incomingReadings;
-
 // Previous local color indication
 // Used to avoid setting the LEDs to the same color
 // they already were
 // Initialized to a null value
 int prevColor = -1;
 
-// ESP-NOW last packet reception timestamp
-TickType_t lastReceivedTime = 0;
-
-#ifdef ESPNOW_CLIENT
-int syncStatus = NORMAL;
-SemaphoreHandle_t xMutex;
-#endif
-
-esp_now_peer_info_t peerInfo;
+int currentColor = 0;
 
 // Battery voltage and current meter
 Adafruit_INA219 ina219;
@@ -88,8 +50,8 @@ short batteryState = ENOUGH_BATTERY;
 // See: https://www.dsprelated.com/freebooks/filters/DC_Blocker.html
 // a1 = -0.9992 should heavily attenuate frequencies below 10Hz
 SOS_IIR_Filter DC_BLOCKER = {
-  gain: 1.0,
-  sos: {{-1.0, 0.0, +0.9992, 0}}
+  1.0, // gain
+  {{-1.0, 0.0, +0.9992, 0}} // sos
 };
 
 // 
@@ -110,8 +72,8 @@ SOS_IIR_Filter DC_BLOCKER = {
 // B ~= [1.00198, -1.99085, 0.98892]
 // A ~= [1.0, -1.99518, 0.99518]
 SOS_IIR_Filter INMP441 = {
-  gain: 1.00197834654696, 
-  sos: { // Second-Order Sections {b1, b2, -a1, -a2}
+  1.00197834654696, 
+  { // Second-Order Sections {b1, b2, -a1, -a2}
     {-1.986920458344451, +0.986963226946616, +1.995178510504166, -0.995184322194091}
   }
 };
@@ -127,8 +89,8 @@ SOS_IIR_Filter INMP441 = {
 // B = [0.169994948147430, 0.280415310498794, -1.120574766348363, 0.131562559965936, 0.974153561246036, -0.282740857326553, -0.152810756202003]
 // A = [1.0, -2.12979364760736134, 0.42996125885751674, 1.62132698199721426, -0.96669962900852902, 0.00121015844426781, 0.04400300696788968]
 SOS_IIR_Filter A_weighting = {
-  gain: 0.169994948147430, 
-  sos: { // Second-Order Sections {b1, b2, -a1, -a2}
+  0.169994948147430, 
+  { // Second-Order Sections {b1, b2, -a1, -a2}
     {-2.00026996133106, +1.00027056142719, -1.060868438509278, -0.163987445885926},
     {+4.35912384203144, +3.09120265783884, +1.208419926363593, -0.273166998428332},
     {-0.70930303489759, -0.29071868393580, +1.982242159753048, -0.982298594928989}
@@ -141,8 +103,8 @@ SOS_IIR_Filter A_weighting = {
 // B = [-0.49164716933714026, 0.14844753846498662, 0.74117815661529129, -0.03281878334039314, -0.29709276192593875, -0.06442545322197900, -0.00364152725482682]
 // A = [1.0, -1.0325358998928318, -0.9524000181023488, 0.8936404694728326   0.2256286147169398  -0.1499917107550188, 0.0156718181681081]
 SOS_IIR_Filter C_weighting = {
-  gain: -0.491647169337140,
-  sos: { 
+  -0.491647169337140,
+  { 
     {+1.4604385758204708, +0.5275070373815286, +1.9946144559930252, -0.9946217070140883},
     {+0.2376222404939509, +0.0140411206016894, -1.3396585608422749, -0.4421457807694559},
     {-2.0000000000000000, +1.0000000000000000, +0.3775800047420818, -0.0356365756680430}
@@ -231,18 +193,6 @@ void mic_i2s_reader_task(void* parameter) {
   i2s_read(I2S_PORT, &samples, SAMPLES_SHORT * sizeof(int32_t), &bytes_read, portMAX_DELAY);
 
   while (true) {
-    #if defined(USE_ESPNOW) && defined(ESPNOW_CLIENT)
-    xSemaphoreTake(xMutex, portMAX_DELAY);
-    if (syncStatus == FREEZE) {
-      xSemaphoreGive(xMutex);
-      vTaskDelay(incomingReadings.latency);
-      xSemaphoreTake(xMutex, portMAX_DELAY);
-      syncStatus = SYNCING;
-      xSemaphoreGive(xMutex);
-    }
-    else xSemaphoreGive(xMutex);
-    #endif
-
     // Block and wait for microphone values from I2S
     //
     // Data is moved from DMA buffers to our 'samples' buffer by the driver ISR
@@ -272,72 +222,6 @@ void mic_i2s_reader_task(void* parameter) {
     // and further calcualte decibel values (division, logarithms, etc...)
     xQueueSend(samples_queue, &sum_sqr_weighted, portMAX_DELAY);
   }
-}
-
-// Callback when data is sent
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  status == ESP_NOW_SEND_SUCCESS;
-  if (status == 0){
-    Serial.println("[INFO] [ESPNOW]: Delivery success.");
-  }
-  else{
-    Serial.println("[ERROR] [ESPNOW]: Delivery fail.");
-  }
-}
-
-void logToThingSpeak(double Logging_leq, double Max_leq, double Min_leq) {
-  // Connect or reconnect to WiFi
-  if(WiFi.status() != WL_CONNECTED){
-    Serial.print("[INFO] [THINGSPEAK]: Attempting to connect to WIFI...");
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    vTaskDelay(pdMS_TO_TICKS(300));
-  }
-
-  if (WiFi.status() == WL_CONNECTED){
-    // Write to ThingSpeak
-    // Field 1: Equivalent noise level for the entire time period (Local)
-    ThingSpeak.setField(1, float(Logging_leq));
-    // Field 2: Maximum indiviual measurement within the time period (Local)
-    ThingSpeak.setField(2, float(Max_leq));
-    // Field 3: Minimum indiviual measurement within the time period (Local)
-    ThingSpeak.setField(3, float(Min_leq));
-
-    // Params: Channel ID, Write API key
-    thingSpeakErrorCode = ThingSpeak.writeFields(CHANNEL_NUMBER, WRITE_API_KEY);
-
-    /*
-    Possible response codes:
-    200 - OK / Success
-    404 - Incorrect API key (or invalid ThingSpeak server address)
-    -101 - Value is out of range or string is too long (> 255 characters)
-    -201 - Invalid field number specified
-    -210 - setField() was not called before writeFields()
-    -301 - Failed to connect to ThingSpeak
-    -302 -  Unexpected failure during write to ThingSpeak
-    -303 - Unable to parse response
-    -304 - Timeout waiting for server to respond
-    -401 - Point was not inserted (most probable cause is exceeding the rate limit)
-    */
-
-    // Print ThingSpeak error code to Serial
-    if(thingSpeakErrorCode == 200){
-      Serial.println("[INFO] [THINGSPEAK]: Channel update successful.");
-    }
-    else{
-      Serial.println("[ERROR] [THINGSPEAK]: Problem updating channel. HTTP error code " + String(thingSpeakErrorCode));
-    }
-  }
-  else {
-    Serial.println("[ERROR] [THINGSPEAK]: Could not connect to WiFi.");
-  }
-}
-
-// Callback when data is received
-void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
-  memcpy(&incomingReadings, incomingData, sizeof(incomingReadings));
-  lastReceivedTime = xTaskGetTickCountFromISR();
-  Serial.print("[INFO] [ESPNOW]: Data received, Color: ");
-  Serial.println(incomingReadings.currentColor);
 }
 
 void leq_calculator_task(void* parameter) {
@@ -387,11 +271,12 @@ void leq_calculator_task(void* parameter) {
       if (Leq_dB > Max_leq) Max_leq = Leq_dB;
 
       updateColor(Leq_dB);
+      setLEDColor(currentColor);
       Serial.print("[INFO] [SLM]: Local reading: ");
       Serial.print(Leq_dB);
       Serial.print(", Color: ");
-      Serial.println(localReadings.currentColor);
-      
+      Serial.println(currentColor);
+
       // ThingSpeak data calculation
       // Accumulate Leq sum
       Logging_sum_sqr += Leq_sum_sqr;
@@ -409,10 +294,6 @@ void leq_calculator_task(void* parameter) {
         if (Logging_leq > MIC_OVERLOAD_DB) Logging_leq = MIC_OVERLOAD_DB;
         else if (Logging_leq < MIC_NOISE_DB) Logging_leq = MIC_NOISE_DB;
 
-        #ifdef USE_LOGGING
-        logToThingSpeak(Logging_leq, Max_leq, Min_leq);
-        #endif
-
         // Reset the sum of squares and sample counter
         Logging_sum_sqr = 0;
         Logging_samples = 0;
@@ -424,64 +305,6 @@ void leq_calculator_task(void* parameter) {
       // Reset the sum of squares and sample counter
       Leq_sum_sqr = 0;
       Leq_samples = 0;
-
-      #ifdef USE_ESPNOW
-      // ESP-NOW comms
-      esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &localReadings, sizeof(localReadings));
-
-      TickType_t latency = 0;
-
-      vTaskDelay(pdMS_TO_TICKS(30));
-      latency = xTaskGetTickCount() - lastReceivedTime;
-      if (latency > pdMS_TO_TICKS(LEQ_PERIOD * 1000.0)) {
-        lastReceivedTime = xTaskGetTickCount();
-        latency = latency - pdMS_TO_TICKS(LEQ_PERIOD * 1000.0);
-      }
-
-      if (latency <= pdMS_TO_TICKS(MAX_LATENCY)) {
-        Serial.print("[INFO] [ESPNOW]: Incoming reading received on time, Color: ");
-        Serial.print(incomingReadings.currentColor);
-        Serial.print(", Latency: ");
-        Serial.println(latency);
-
-        #ifdef ESPNOW_SERVER
-        // Clear latency measurement
-        localReadings.latency = 0;
-        #endif
-
-        if (incomingReadings.currentColor > localReadings.currentColor)
-        {
-          setLEDColor(incomingReadings.currentColor);
-        }
-        else {
-          setLEDColor(localReadings.currentColor);  
-        }
-      }
-      else if (latency <= pdMS_TO_TICKS(SYNC_FAIL_LATENCY)) {
-        Serial.print("[ERROR] [ESPNOW]: Incoming reading was not received on time, Color: ");
-        Serial.print(incomingReadings.currentColor);
-        Serial.print(", Latency: ");
-        Serial.print(latency);
-
-        #ifdef ESPNOW_SERVER
-        localReadings.latency = latency;
-        #endif
-
-        setLEDColor(localReadings.currentColor);
-      }
-      else {
-        Serial.println("[ERROR] [ESPNOW]: Did not receive any measurements. There doesn't seem to be another RSIM device active within range.");
-
-        #ifdef ESPNOW_SERVER
-        localReadings.latency = latency;
-        #endif
-
-        setLEDColor(localReadings.currentColor);
-      }
-
-      #else
-      setLEDColor(localReadings.currentColor);
-      #endif
     }
   }
 }
@@ -523,13 +346,13 @@ void battery_checker_task(void* parameter) {
 // Update the color indication based on the Leq value
 void updateColor(float Leq_dB){
   if (Leq_dB < GREEN_UPPER_LIMIT) {
-    localReadings.currentColor = GREEN;
+    currentColor = GREEN;
   }
   else if (Leq_dB < YELLOW_UPPER_LIMIT) {
-    localReadings.currentColor = YELLOW;
+    currentColor = YELLOW;
   }
   else {
-    localReadings.currentColor = RED;
+    currentColor = RED;
   }
 }
 
@@ -537,19 +360,19 @@ void updateColor(float Leq_dB){
 void setLEDColor(int color){
   if (color != prevColor) {
     prevColor = color;
-    ledcWrite(GREEN_LED_CHANNEL, 255);
-    ledcWrite(RED_LED_CHANNEL, 255);
-    ledcWrite(BLUE_LED_CHANNEL, 255);
+    analogWrite(GREEN_LED_PIN, 255);
+    analogWrite(RED_LED_PIN, 255);
+    analogWrite(BLUE_LED_PIN, 255);
 
     if(color == RED){
-      ledcWrite(RED_LED_CHANNEL, 0);
+      analogWrite(RED_LED_PIN, 0);
     }
     else if(color == GREEN){
-      ledcWrite(GREEN_LED_CHANNEL, 0);
+      analogWrite(GREEN_LED_PIN, 0);
     }
     else { // color == YELLOW
-      ledcWrite(GREEN_LED_CHANNEL, 100);
-      ledcWrite(RED_LED_CHANNEL, 0);
+      analogWrite(GREEN_LED_PIN, 100);
+      analogWrite(RED_LED_PIN, 0);
     }
   }
 }
@@ -565,14 +388,9 @@ void setup() {
   setCpuFrequencyMhz(240);  
 
   // ledc (PWM) frequency and resolution setup
-  ledcSetup(RED_LED_CHANNEL, LEDC_FREQ, LEDC_RESOLUTION);
-  ledcSetup(GREEN_LED_CHANNEL, LEDC_FREQ, LEDC_RESOLUTION);
-  ledcSetup(BLUE_LED_CHANNEL, LEDC_FREQ, LEDC_RESOLUTION);
-
-  // ledc (PWM) pin setup
-  ledcAttachPin(RED_LED_PIN, RED_LED_CHANNEL);
-  ledcAttachPin(GREEN_LED_PIN, GREEN_LED_CHANNEL);
-  ledcAttachPin(BLUE_LED_PIN, BLUE_LED_CHANNEL);
+  ledcAttach(RED_LED_PIN, LEDC_FREQ, LEDC_RESOLUTION);
+  ledcAttach(GREEN_LED_PIN, LEDC_FREQ, LEDC_RESOLUTION);
+  ledcAttach(BLUE_LED_PIN, LEDC_FREQ, LEDC_RESOLUTION);
 
   // Init serial for logging
   Serial.begin(115200);
@@ -589,86 +407,6 @@ void setup() {
 
   // Create FreeRTOS queue
   samples_queue = xQueueCreate(8, sizeof(float));
-
-  // Required to use IEEE 802.11 WiFi standard and ESPNOW
-  #if defined(USE_ESPNOW) || defined(USE_LOGGING)
-  WiFi.mode(WIFI_STA);
-  #endif
-
-  #ifdef USE_LOGGING
-  // Connect or reconnect to WiFi
-  if(WiFi.status() != WL_CONNECTED){
-    Serial.println("[INFO] [THINGSPEAK]: Attempting to connect to WIFI...");
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    vTaskDelay(pdMS_TO_TICKS(5000));
-  }
-
-  if (WiFi.status() == WL_CONNECTED) Serial.println("[INFO] [THINGSPEAK]: Connected to WiFi.");
-  else Serial.println("[ERROR] [THINGSPEAK]: Could not connect to WiFi.");
-
-  // Initialize the ThingSpeak object with the required WiFi client
-  ThingSpeak.begin(client);
-  #endif
-
-  // Initialize latency to zero
-  localReadings.latency = 0;
-
-  #if defined(USE_ESPNOW) && defined(ESPNOW_CLIENT)
-  xMutex = xSemaphoreCreateMutex();
-  #endif
-
-
-  int espnowInitCounter = 0;
-
-  #ifdef USE_ESPNOW
-  // Init ESPNOW
-  while (esp_now_init() != ESP_OK && espnowInitCounter < ESPNOW_MAX_INIT_FAILURES) {
-    espnowInitCounter++;
-    Serial.print("[ERROR] [ESPNOW]: Could not initialize ESP-NOW. Failures: ");
-    Serial.println(espnowInitCounter);
-  }
-
-  if (!(espnowInitCounter < ESPNOW_MAX_INIT_FAILURES)) {
-    Serial.print("[ERROR] [ESPNOW]: ESP-NOW initialization failures have exceeded the limit. Restarting ESP. ");
-    esp_restart();
-  }
-  else espnowInitCounter = 0;
-
-  // Register ESPNOW peer
-  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-  peerInfo.channel = 0;  
-  peerInfo.encrypt = false;
-  
-  // Add peer        
-  while (esp_now_add_peer(&peerInfo) != ESP_OK && espnowInitCounter < ESPNOW_MAX_INIT_FAILURES){
-    espnowInitCounter++;
-    Serial.print("[ERROR] [ESPNOW]: Failed to add peer. Failures: ");
-    Serial.println(espnowInitCounter);
-  }
-
-  if (!(espnowInitCounter < ESPNOW_MAX_INIT_FAILURES)) {
-    Serial.println("[ERROR] [ESPNOW]: ESP-NOW initialization failures have exceeded the limit. Restarting ESP. ");
-    esp_restart();
-  }
-  else espnowInitCounter = 0;
-
-  // Register for a callback function that will be called when data is received
-  esp_now_register_recv_cb(OnDataRecv);
-  #endif
-
-  #ifndef USE_ESPNOW
-  Serial.println("[INFO] [ESPNOW]: ESP-NOW is disabled.");
-  #else
-  #ifdef ESPNOW_SERVER
-  Serial.println("[INFO] [ESPNOW]: Role: Server.");
-  #else
-  Serial.println("[INFO] [ESPNOW]: Role: Client.");
-  #endif
-  #endif
-
-  #ifndef USE_LOGGING
-  Serial.println("[INFO] [THINGSPEAK]: ThingSpeak logging is disabled.");
-  #endif
 
   pinMode(CHARGER_LED_PIN, OUTPUT);
   // Turn off charging indicator LED
