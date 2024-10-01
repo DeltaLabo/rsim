@@ -36,10 +36,6 @@
 // Configuration
 //
 
-// Comment to disable functionality
-//#define USE_LOGGING
-//#define USE_ESPNOW
-
 #define LEQ_PERIOD        2.0      // second(s)
 #define WEIGHTING         A_weighting // 'A_weighting' 'C_weighting' or 'None' (Z_weighting)
 #define LEQ_UNITS         "LAeq"      // customize based on above weighting used
