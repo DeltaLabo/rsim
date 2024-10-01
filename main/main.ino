@@ -1,4 +1,3 @@
-#include <WiFi.h>
 #include <Arduino.h>
 #include <cstring>
 #include "time.h"
