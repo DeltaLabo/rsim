@@ -10,31 +10,6 @@
 #define ESP32_RESTART_PERIOD 86400000 // millisecond(s), 24 hours
 #define BATTERY_CHECK_PERIOD 60000 // millisecond(s), 1 minute
 
-#define MAX_LATENCY 200 // millisecond(s)
-#define SYNC_FAIL_LATENCY 2100 // millisecond(s)
-#define MAX_SYNC_FAILURES 200
-
-#define ESPNOW_MAX_INIT_FAILURES 10
-
-// Uncomment to make the RSIM unit synchronize other client units
-#define ESPNOW_SERVER
-
-// Comment the above define to let the RSIM unit be synchronized by the server unit
-#ifndef ESPNOW_SERVER
-#define ESPNOW_CLIENT
-#endif
-
-// WiFi parameters
-#define WIFI_SSID "LaboratorioDelta"
-#define WIFI_PASSWORD "labdelta21!"
-
-// ThingSpeak parameters
-#define WRITE_API_KEY "CLXSWMD66IFK7PO4"
-#define CHANNEL_NUMBER 2363548
-
-// ESPNOW MAC addresses
-const uint8_t broadcastAddress[] = {0x48, 0x27, 0xE2, 0xE6, 0xDC, 0x84}; // For YD
-
 // Indicator color definitions
 #define RED 2
 #define YELLOW 1
@@ -47,11 +22,6 @@ const uint8_t broadcastAddress[] = {0x48, 0x27, 0xE2, 0xE6, 0xDC, 0x84}; // For 
 
 #define LEDC_FREQ 5000 // Hz
 #define LEDC_RESOLUTION 8 // bits
-
-// ESP-NOW sync states
-#define NORMAL 0
-#define FREEZE 1
-#define SYNCING 2
 
 // Power states
 #define LOW_BATTERY 0
