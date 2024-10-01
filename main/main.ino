@@ -1,10 +1,4 @@
-//#include <Arduino.h>
-//#include <cstring>
-//#include "time.h"
-#include "freertos/semphr.h"
-#include <esp_system.h>
 #include "driver/i2s.h"
-#include "driver/ledc.h"
 #include <Wire.h>
 #include <Adafruit_INA219.h>
 
