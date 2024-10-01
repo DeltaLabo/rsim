@@ -15,11 +15,6 @@
 #define YELLOW 1
 #define GREEN 0
 
-// ledc channels
-#define RED_LED_CHANNEL 0
-#define GREEN_LED_CHANNEL 1
-#define BLUE_LED_CHANNEL 2
-
 #define LEDC_FREQ 5000 // Hz
 #define LEDC_RESOLUTION 8 // bits
 

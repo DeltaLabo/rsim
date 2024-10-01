@@ -50,8 +50,8 @@ short batteryState = ENOUGH_BATTERY;
 // See: https://www.dsprelated.com/freebooks/filters/DC_Blocker.html
 // a1 = -0.9992 should heavily attenuate frequencies below 10Hz
 SOS_IIR_Filter DC_BLOCKER = {
-  gain: 1.0,
-  sos: {{-1.0, 0.0, +0.9992, 0}}
+  1.0, // gain
+  {{-1.0, 0.0, +0.9992, 0}} // sos
 };
 
 // 
@@ -72,8 +72,8 @@ SOS_IIR_Filter DC_BLOCKER = {
 // B ~= [1.00198, -1.99085, 0.98892]
 // A ~= [1.0, -1.99518, 0.99518]
 SOS_IIR_Filter INMP441 = {
-  gain: 1.00197834654696, 
-  sos: { // Second-Order Sections {b1, b2, -a1, -a2}
+  1.00197834654696, 
+  { // Second-Order Sections {b1, b2, -a1, -a2}
     {-1.986920458344451, +0.986963226946616, +1.995178510504166, -0.995184322194091}
   }
 };
@@ -89,8 +89,8 @@ SOS_IIR_Filter INMP441 = {
 // B = [0.169994948147430, 0.280415310498794, -1.120574766348363, 0.131562559965936, 0.974153561246036, -0.282740857326553, -0.152810756202003]
 // A = [1.0, -2.12979364760736134, 0.42996125885751674, 1.62132698199721426, -0.96669962900852902, 0.00121015844426781, 0.04400300696788968]
 SOS_IIR_Filter A_weighting = {
-  gain: 0.169994948147430, 
-  sos: { // Second-Order Sections {b1, b2, -a1, -a2}
+  0.169994948147430, 
+  { // Second-Order Sections {b1, b2, -a1, -a2}
     {-2.00026996133106, +1.00027056142719, -1.060868438509278, -0.163987445885926},
     {+4.35912384203144, +3.09120265783884, +1.208419926363593, -0.273166998428332},
     {-0.70930303489759, -0.29071868393580, +1.982242159753048, -0.982298594928989}
@@ -103,8 +103,8 @@ SOS_IIR_Filter A_weighting = {
 // B = [-0.49164716933714026, 0.14844753846498662, 0.74117815661529129, -0.03281878334039314, -0.29709276192593875, -0.06442545322197900, -0.00364152725482682]
 // A = [1.0, -1.0325358998928318, -0.9524000181023488, 0.8936404694728326   0.2256286147169398  -0.1499917107550188, 0.0156718181681081]
 SOS_IIR_Filter C_weighting = {
-  gain: -0.491647169337140,
-  sos: { 
+  -0.491647169337140,
+  { 
     {+1.4604385758204708, +0.5275070373815286, +1.9946144559930252, -0.9946217070140883},
     {+0.2376222404939509, +0.0140411206016894, -1.3396585608422749, -0.4421457807694559},
     {-2.0000000000000000, +1.0000000000000000, +0.3775800047420818, -0.0356365756680430}
@@ -360,19 +360,19 @@ void updateColor(float Leq_dB){
 void setLEDColor(int color){
   if (color != prevColor) {
     prevColor = color;
-    ledcWrite(GREEN_LED_CHANNEL, 255);
-    ledcWrite(RED_LED_CHANNEL, 255);
-    ledcWrite(BLUE_LED_CHANNEL, 255);
+    analogWrite(GREEN_LED_PIN, 255);
+    analogWrite(RED_LED_PIN, 255);
+    analogWrite(BLUE_LED_PIN, 255);
 
     if(color == RED){
-      ledcWrite(RED_LED_CHANNEL, 0);
+      analogWrite(RED_LED_PIN, 0);
     }
     else if(color == GREEN){
-      ledcWrite(GREEN_LED_CHANNEL, 0);
+      analogWrite(GREEN_LED_PIN, 0);
     }
     else { // color == YELLOW
-      ledcWrite(GREEN_LED_CHANNEL, 100);
-      ledcWrite(RED_LED_CHANNEL, 0);
+      analogWrite(GREEN_LED_PIN, 100);
+      analogWrite(RED_LED_PIN, 0);
     }
   }
 }
@@ -388,14 +388,9 @@ void setup() {
   setCpuFrequencyMhz(240);  
 
   // ledc (PWM) frequency and resolution setup
-  ledcSetup(RED_LED_CHANNEL, LEDC_FREQ, LEDC_RESOLUTION);
-  ledcSetup(GREEN_LED_CHANNEL, LEDC_FREQ, LEDC_RESOLUTION);
-  ledcSetup(BLUE_LED_CHANNEL, LEDC_FREQ, LEDC_RESOLUTION);
-
-  // ledc (PWM) pin setup
-  ledcAttachPin(RED_LED_PIN, RED_LED_CHANNEL);
-  ledcAttachPin(GREEN_LED_PIN, GREEN_LED_CHANNEL);
-  ledcAttachPin(BLUE_LED_PIN, BLUE_LED_CHANNEL);
+  ledcAttach(RED_LED_PIN, LEDC_FREQ, LEDC_RESOLUTION);
+  ledcAttach(GREEN_LED_PIN, LEDC_FREQ, LEDC_RESOLUTION);
+  ledcAttach(BLUE_LED_PIN, LEDC_FREQ, LEDC_RESOLUTION);
 
   // Init serial for logging
   Serial.begin(115200);
