@@ -35,7 +35,14 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 // Initialized to a null value
 int prevColor = -1;
 
-int currentColor = 0;
+// Current color being displayed on the LEDs
+// Initialized to a null value
+int currentColor = -1;
+
+// Last measurements collected, converted to color
+int colorArray[COLOR_WINDOW_SIZE];
+// Flag to reset the values stored in the array
+bool resetColorArray = true;
 
 // Battery voltage and current meter
 Adafruit_INA219 ina219;
@@ -270,8 +277,14 @@ void leq_calculator_task(void* parameter) {
       if (Leq_dB < Min_leq) Min_leq = Leq_dB;
       if (Leq_dB > Max_leq) Max_leq = Leq_dB;
 
-      updateColor(Leq_dB);
-      setLEDColor(currentColor);
+      currentColor = leqToColor(Leq_dB);
+      currentColor = updateColorArray(currentColor);
+
+      if (currentColor != prevColor) {
+        prevColor = currentColor;
+        setLEDColor(currentColor);
+      }
+
       Serial.print("[INFO] [SLM]: Local reading: ");
       Serial.print(Leq_dB);
       Serial.print(", Color: ");
@@ -343,37 +356,72 @@ void battery_checker_task(void* parameter) {
   }
 }
 
-// Update the color indication based on the Leq value
-void updateColor(float Leq_dB){
+// Convert a sound measurement in decibels to a color code
+int leqToColor(float Leq_dB){
   if (Leq_dB < GREEN_UPPER_LIMIT) {
-    currentColor = GREEN;
+    return GREEN;
   }
   else if (Leq_dB < YELLOW_UPPER_LIMIT) {
-    currentColor = YELLOW;
+    return YELLOW;
   }
   else {
-    currentColor = RED;
+    return RED;
+  }
+}
+
+int updateColorArray(int currentColor) {
+  if (resetColorArray) {
+    // Populate the array with copies of the same value
+    for (int i=0; i<COLOR_WINDOW_SIZE; i++) {
+      colorArray[i] = currentColor;
+    }
+    resetColorArray = false;
+    // Don't change the provided color
+    return currentColor;
+  } else {
+    // The array must be reset whenever a new measurement is lower
+    // than the last one
+    if (currentColor < colorArray[COLOR_WINDOW_SIZE-1]) {
+      resetColorArray = true;
+      updateColorArray(currentColor);
+    } else {
+      // Append the new value to the array
+      for (int i=0; i<COLOR_WINDOW_SIZE-1; i++) {
+        colorArray[i] = colorArray[i+1];
+      }
+      colorArray[COLOR_WINDOW_SIZE-1] = currentColor;
+
+      // Calculate the average color
+      // This is possible since colors are represented by integers in the range 0-2
+      float averageColor = 0.0;
+      for (int i=0; i<COLOR_WINDOW_SIZE; i++) {
+        averageColor += colorArray[i];
+      }
+      averageColor /= float(COLOR_WINDOW_SIZE);
+
+      // Convert the floating point average to one of the defined colors
+      if (0.0 <= averageColor < 0.5) {return GREEN;}
+      if (0.5 <= averageColor < 1.4) {return YELLOW;}
+      else {return RED;}
+    }
   }
 }
 
 // Update the LED color
 void setLEDColor(int color){
-  if (color != prevColor) {
-    prevColor = color;
-    analogWrite(GREEN_LED_PIN, 255);
-    analogWrite(RED_LED_PIN, 255);
-    analogWrite(BLUE_LED_PIN, 255);
+  analogWrite(GREEN_LED_PIN, 255);
+  analogWrite(RED_LED_PIN, 255);
+  analogWrite(BLUE_LED_PIN, 255);
 
-    if(color == RED){
-      analogWrite(RED_LED_PIN, 0);
-    }
-    else if(color == GREEN){
-      analogWrite(GREEN_LED_PIN, 0);
-    }
-    else { // color == YELLOW
-      analogWrite(GREEN_LED_PIN, 100);
-      analogWrite(RED_LED_PIN, 0);
-    }
+  if(color == RED){
+    analogWrite(RED_LED_PIN, 0);
+  }
+  else if(color == GREEN){
+    analogWrite(GREEN_LED_PIN, 0);
+  }
+  else { // color == YELLOW
+    analogWrite(GREEN_LED_PIN, 100);
+    analogWrite(RED_LED_PIN, 0);
   }
 }
 

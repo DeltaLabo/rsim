@@ -15,6 +15,9 @@
 #define YELLOW 1
 #define GREEN 0
 
+// Amount of measurements to calculate the average color over
+#define COLOR_WINDOW_SIZE 5
+
 #define LEDC_FREQ 5000 // Hz
 #define LEDC_RESOLUTION 8 // bits
 
