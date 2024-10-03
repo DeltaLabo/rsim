@@ -369,6 +369,14 @@ int leqToColor(float Leq_dB){
   }
 }
 
+void appendToArray(int* array, int arraySize, int newValue) {
+  // Append the new value to the array
+  for (int i=0; i<arraySize-1; i++) {
+    array[i] = array[i+1];
+  }
+  array[arraySize-1] = newValue;
+}
+
 int updateColorArray(int currentColor) {
   if (resetColorArray) {
     // Populate the array with copies of the same value
@@ -385,24 +393,30 @@ int updateColorArray(int currentColor) {
       resetColorArray = true;
       updateColorArray(currentColor);
     } else {
-      // Append the new value to the array
-      for (int i=0; i<COLOR_WINDOW_SIZE-1; i++) {
-        colorArray[i] = colorArray[i+1];
-      }
-      colorArray[COLOR_WINDOW_SIZE-1] = currentColor;
+      if (currentColor == RED && colorArray[COLOR_WINDOW_SIZE-1] == GREEN) {
+        appendToArray(colorArray, COLOR_WINDOW_SIZE, currentColor);
 
-      // Calculate the average color
-      // This is possible since colors are represented by integers in the range 0-2
-      float averageColor = 0.0;
-      for (int i=0; i<COLOR_WINDOW_SIZE; i++) {
-        averageColor += colorArray[i];
-      }
-      averageColor /= float(COLOR_WINDOW_SIZE);
+        return currentColor;
+      } else if (currentColor == RED && colorArray[COLOR_WINDOW_SIZE-1] == RED) {
+        appendToArray(colorArray, COLOR_WINDOW_SIZE, currentColor);
 
-      // Convert the floating point average to one of the defined colors
-      if (0.0 <= averageColor < 0.5) {return GREEN;}
-      if (0.5 <= averageColor < 1.4) {return YELLOW;}
-      else {return RED;}
+        return currentColor;
+      } else {
+        appendToArray(colorArray, COLOR_WINDOW_SIZE, currentColor);
+
+        // Calculate the average color
+        // This is possible since colors are represented by integers in the range 0-2
+        float averageColor = 0.0;
+        for (int i=0; i<COLOR_WINDOW_SIZE; i++) {
+          averageColor += colorArray[i];
+        }
+        averageColor /= float(COLOR_WINDOW_SIZE);
+
+        // Convert the floating point average to one of the defined colors
+        if (0.0 <= averageColor < 0.5) {return GREEN;}
+        if (0.5 <= averageColor < 1.4) {return YELLOW;}
+        else {return RED;}
+      }
     }
   }
 }
