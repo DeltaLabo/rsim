@@ -15,6 +15,9 @@
 #define YELLOW 1
 #define GREEN 0
 
+// Amount of measurements to calculate the average color over
+#define COLOR_WINDOW_SIZE 5
+
 #define LEDC_FREQ 5000 // Hz
 #define LEDC_RESOLUTION 8 // bits
 
@@ -27,8 +30,11 @@
 #define MIN_CHARGING_CURRENT 200 // mA
 #define MIN_CHARGED_VOLTAGE 12.8 // V
 
+// Comment to disable
+//#define USE_BATTERY
+
 //
-// Configuration
+// SLM Configuration
 //
 
 #define LEQ_PERIOD        2.0      // second(s)
@@ -37,7 +43,7 @@
 #define DB_UNITS          "dBA"       // customize based on above weighting used
 #define MIC_OFFSET_DB     1.3         // Offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration.
 
-#define GREEN_UPPER_LIMIT  55.0 // dBA, maximum noise level for which the indicator stays green
+#define GREEN_UPPER_LIMIT  57.0 // dBA, maximum noise level for which the indicator stays green
 #define YELLOW_UPPER_LIMIT 70.0 // dBA, maximum noise level for which the indicator stays yellow
 
 #endif

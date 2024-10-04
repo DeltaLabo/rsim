@@ -35,7 +35,14 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 // Initialized to a null value
 int prevColor = -1;
 
-int currentColor = 0;
+// Current color being displayed on the LEDs
+// Initialized to a null value
+int currentColor = -1;
+
+// Last measurements collected, converted to color
+int colorArray[COLOR_WINDOW_SIZE];
+// Flag to reset the values stored in the array
+bool initColorArray = true;
 
 // Battery voltage and current meter
 Adafruit_INA219 ina219;
@@ -270,9 +277,15 @@ void leq_calculator_task(void* parameter) {
       if (Leq_dB < Min_leq) Min_leq = Leq_dB;
       if (Leq_dB > Max_leq) Max_leq = Leq_dB;
 
-      updateColor(Leq_dB);
-      setLEDColor(currentColor);
-      Serial.print("[INFO] [SLM]: Local reading: ");
+      currentColor = leqToColor(Leq_dB);
+      currentColor = updateColorArray(currentColor);
+
+      if (currentColor != prevColor) {
+        prevColor = currentColor;
+        setLEDColor(currentColor);
+      }
+
+      Serial.print("[INFO] [SLM]: Local reading (dBA): ");
       Serial.print(Leq_dB);
       Serial.print(", Color: ");
       Serial.println(currentColor);
@@ -343,37 +356,95 @@ void battery_checker_task(void* parameter) {
   }
 }
 
-// Update the color indication based on the Leq value
-void updateColor(float Leq_dB){
+// Convert a sound measurement in decibels to a color code
+int leqToColor(float Leq_dB){
   if (Leq_dB < GREEN_UPPER_LIMIT) {
-    currentColor = GREEN;
+    return GREEN;
   }
   else if (Leq_dB < YELLOW_UPPER_LIMIT) {
-    currentColor = YELLOW;
+    return YELLOW;
   }
   else {
-    currentColor = RED;
+    return RED;
+  }
+}
+
+void resetArray(int* array, int arraySize, int value) {
+  // Populate the array with copies of the same value
+  for (int i=0; i<arraySize; i++) {
+    array[i] = value;
+  }
+}
+
+void appendToArray(int* array, int arraySize, int newValue) {
+  // Append the new value to the array
+  for (int i=0; i<arraySize-1; i++) {
+    array[i] = array[i+1];
+  }
+  array[arraySize-1] = newValue;
+}
+
+int updateColorArray(int currentColor) {
+  if (initColorArray) {
+    resetArray(colorArray, COLOR_WINDOW_SIZE, currentColor);
+    initColorArray = false;
+    // Don't change the current color
+    return currentColor;
+  } else {
+    // The array must be reset whenever a new measurement is lower
+    // than the last one
+    if (currentColor < colorArray[COLOR_WINDOW_SIZE-1]) {
+      resetArray(colorArray, COLOR_WINDOW_SIZE, currentColor);
+      // Don't change the current color
+      return currentColor;
+    } else {
+      if (currentColor == RED && colorArray[COLOR_WINDOW_SIZE-1] == GREEN) {
+        appendToArray(colorArray, COLOR_WINDOW_SIZE, currentColor);
+
+        return currentColor;
+      } else if (currentColor == RED && colorArray[COLOR_WINDOW_SIZE-1] == RED) {
+        appendToArray(colorArray, COLOR_WINDOW_SIZE, currentColor);
+
+        return currentColor;
+      } else {
+        appendToArray(colorArray, COLOR_WINDOW_SIZE, currentColor);
+
+        // Calculate the average color
+        // This is possible since colors are represented by integers in the range 0-2
+        float averageColor = 0.0;
+        for (int i=0; i<COLOR_WINDOW_SIZE; i++) {
+          averageColor += colorArray[i];
+        }
+        averageColor /= float(COLOR_WINDOW_SIZE);
+
+        // Convert the floating point average to one of the defined colors
+        if (averageColor < 0.5) { // 0.0 <= averageColor < 0.5
+          return GREEN;
+        } else if (averageColor < 1.4) { // 0.5 <= averageColor < 1.4
+          return YELLOW;
+        } else { // averageColor >= 1.4
+          return RED;
+        }
+      }
+    }
   }
 }
 
 // Update the LED color
 void setLEDColor(int color){
-  if (color != prevColor) {
-    prevColor = color;
-    analogWrite(GREEN_LED_PIN, 255);
-    analogWrite(RED_LED_PIN, 255);
-    analogWrite(BLUE_LED_PIN, 255);
+  analogWrite(GREEN_LED_PIN, 255);
+  analogWrite(RED_LED_PIN, 255);
+  analogWrite(BLUE_LED_PIN, 255);
 
-    if(color == RED){
-      analogWrite(RED_LED_PIN, 0);
-    }
-    else if(color == GREEN){
-      analogWrite(GREEN_LED_PIN, 0);
-    }
-    else { // color == YELLOW
-      analogWrite(GREEN_LED_PIN, 100);
-      analogWrite(RED_LED_PIN, 0);
-    }
+  if(color == RED){
+    analogWrite(RED_LED_PIN, 0);
+  }
+  else if(color == GREEN){
+    analogWrite(GREEN_LED_PIN, 0);
+  }
+  else { // color == YELLOW
+    analogWrite(GREEN_LED_PIN, 100);
+    analogWrite(RED_LED_PIN, 0);
   }
 }
 
@@ -395,6 +466,10 @@ void setup() {
   // Init serial for logging
   Serial.begin(115200);
 
+  // Create FreeRTOS queue
+  samples_queue = xQueueCreate(8, sizeof(float));
+
+  #ifdef USE_BATTERY
   Wire.begin(INA_SDA, INA_SCL); // SDA, SCL
 
   // Initialize the INA219.
@@ -402,18 +477,13 @@ void setup() {
   // you can call a setCalibration function to change this range (see comments).
   if (!ina219.begin()) {
     Serial.println("[ERROR] [POWER]: Failed to find INA219 chip.");
-    #define NO_INA
+  } else {
+    pinMode(CHARGER_LED_PIN, OUTPUT);
+    // Turn off charging indicator LED
+    digitalWrite(CHARGER_LED_PIN, HIGH);
+
+    xTaskCreatePinnedToCore(battery_checker_task, "Battery Checker", BAT_TASK_STACK, NULL, BAT_TASK_PRI, NULL, 1);
   }
-
-  // Create FreeRTOS queue
-  samples_queue = xQueueCreate(8, sizeof(float));
-
-  pinMode(CHARGER_LED_PIN, OUTPUT);
-  // Turn off charging indicator LED
-  digitalWrite(CHARGER_LED_PIN, HIGH);
-
-  #ifndef NO_INA
-  xTaskCreatePinnedToCore(battery_checker_task, "Battery Checker", BAT_TASK_STACK, NULL, BAT_TASK_PRI, NULL, 1);
   #endif
 
   // Create the mic reader task and pin it to the first core (ID=0)
