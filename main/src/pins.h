@@ -1,7 +1,7 @@
 #ifndef PINS_H
 #define PINS_H
 
-#include "slm_params.h"
+#include "slm-params.h"
 
 #define I2S_WS  13
 #define I2S_SCK 12
