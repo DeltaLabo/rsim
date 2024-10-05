@@ -38,9 +38,6 @@
 //
 
 #define LEQ_PERIOD        2.0      // second(s)
-#define WEIGHTING         A_weighting // 'A_weighting' 'C_weighting' or 'None' (Z_weighting)
-#define LEQ_UNITS         "LAeq"      // customize based on above weighting used
-#define DB_UNITS          "dBA"       // customize based on above weighting used
 #define MIC_OFFSET_DB     1.3         // Offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration.
 
 #define GREEN_UPPER_LIMIT  57.0 // dBA, maximum noise level for which the indicator stays green

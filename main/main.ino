@@ -1,30 +1,15 @@
+#include <Arduino.h>
+
 #include "driver/i2s.h"
+#include "driver/ledc.h"
 #include <Wire.h>
 #include <Adafruit_INA219.h>
 
-#include "slm_params.h"
-#include "pins.h"
-#include "sos-iir-filter-xtensa.h"
-
-// Equalizer used to flatten the microphone's frequency response
-#define MIC_EQUALIZER     INMP441
-
-// Values taken from microphone datasheet
-#define MIC_SENSITIVITY   -26         // dBFS value expected at MIC_REF_DB (Sensitivity value from datasheet)
-#define MIC_REF_DB        94.0        // Value at which point sensitivity is specified in datasheet (dB)
-#define MIC_OVERLOAD_DB   120.0       // dB - Acoustic overload point
-#define MIC_NOISE_DB      33.0        // dB - Noise floor
-#define MIC_BITS          24          // valid number of bits in I2S data
-#define MIC_CONVERT(s)    (s >> (SAMPLE_BITS - MIC_BITS))
-#define MIC_TIMING_SHIFT  0           // Set to one to fix MSB timing for some microphones, i.e. SPH0645LM4H-x
-
-// Calculate reference amplitude value at compile time
-constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_BITS-1))-1);
-
-//
-// I2S pins - Can be routed to almost any (unused) ESP32 pin.
-//            SD can be any pin, inlcuding input only pins (36-39).
-//            SCK (i.e. BCLK) and WS (i.e. L/R CLK) must be output capable pins
+#include "src/sos-iir-filter-xtensa.h"
+#include "src/slm-params.h"
+#include "src/pins.h"
+#include "src/mic-params.h"
+#include "src/color-control.h"
 
 // I2S peripheral to use (0 or 1)
 #define I2S_PORT          I2S_NUM_0
@@ -48,6 +33,11 @@ bool initColorArray = true;
 Adafruit_INA219 ina219;
 
 short batteryState = ENOUGH_BATTERY;
+
+QueueHandle_t samples_queue;
+
+// Static buffer for block of samples
+float samples[SAMPLES_SHORT] __attribute__((aligned(4)));
 
 //
 // IIR Filters
@@ -103,37 +93,6 @@ SOS_IIR_Filter A_weighting = {
     {-0.70930303489759, -0.29071868393580, +1.982242159753048, -0.982298594928989}
   }
 };
-
-//
-// C-weighting IIR Filter, Fs = 48KHz 
-// Designed by invfreqz curve-fitting
-// B = [-0.49164716933714026, 0.14844753846498662, 0.74117815661529129, -0.03281878334039314, -0.29709276192593875, -0.06442545322197900, -0.00364152725482682]
-// A = [1.0, -1.0325358998928318, -0.9524000181023488, 0.8936404694728326   0.2256286147169398  -0.1499917107550188, 0.0156718181681081]
-SOS_IIR_Filter C_weighting = {
-  -0.491647169337140,
-  { 
-    {+1.4604385758204708, +0.5275070373815286, +1.9946144559930252, -0.9946217070140883},
-    {+0.2376222404939509, +0.0140411206016894, -1.3396585608422749, -0.4421457807694559},
-    {-2.0000000000000000, +1.0000000000000000, +0.3775800047420818, -0.0356365756680430}
-  }
-};
-
-
-//
-// Sampling
-//
-#define SAMPLE_RATE       48000 // Hz, fixed to design of IIR filters
-#define SAMPLE_BITS       32    // bits
-#define SAMPLE_T          int32_t // Sample data type, 32 bits to accommodate the incoming 24-bit samples
-#define SAMPLES_SHORT     (SAMPLE_RATE / 8) // ~125ms
-#define SAMPLES_LEQ       (SAMPLE_RATE * LEQ_PERIOD)
-#define DMA_BANK_SIZE     (SAMPLES_SHORT / 16)
-#define DMA_BANKS         32
-
-QueueHandle_t samples_queue;
-
-// Static buffer for block of samples
-float samples[SAMPLES_SHORT] __attribute__((aligned(4)));
 
 //
 // I2S Microphone sampling setup 
@@ -220,10 +179,10 @@ void mic_i2s_reader_task(void* parameter) {
     float sum_sqr_weighted = DC_BLOCKER.filter(samples, samples, SAMPLES_SHORT);
 
     // Apply equalization and calculate Z-weighted sum of squares
-    sum_sqr_weighted = MIC_EQUALIZER.filter(samples, samples, SAMPLES_SHORT);
+    sum_sqr_weighted = INMP441.filter(samples, samples, SAMPLES_SHORT);
 
     // Apply weighting and calculate weigthed sum of squares
-    sum_sqr_weighted = WEIGHTING.filter(samples, samples, SAMPLES_SHORT);
+    sum_sqr_weighted = A_weighting.filter(samples, samples, SAMPLES_SHORT);
 
     // Send the sums to FreeRTOS queue where main task will pick them up
     // and further calcualte decibel values (division, logarithms, etc...)
@@ -353,98 +312,6 @@ void battery_checker_task(void* parameter) {
     }
 
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(BATTERY_CHECK_PERIOD));
-  }
-}
-
-// Convert a sound measurement in decibels to a color code
-int leqToColor(float Leq_dB){
-  if (Leq_dB < GREEN_UPPER_LIMIT) {
-    return GREEN;
-  }
-  else if (Leq_dB < YELLOW_UPPER_LIMIT) {
-    return YELLOW;
-  }
-  else {
-    return RED;
-  }
-}
-
-void resetArray(int* array, int arraySize, int value) {
-  // Populate the array with copies of the same value
-  for (int i=0; i<arraySize; i++) {
-    array[i] = value;
-  }
-}
-
-void appendToArray(int* array, int arraySize, int newValue) {
-  // Append the new value to the array
-  for (int i=0; i<arraySize-1; i++) {
-    array[i] = array[i+1];
-  }
-  array[arraySize-1] = newValue;
-}
-
-int updateColorArray(int currentColor) {
-  if (initColorArray) {
-    resetArray(colorArray, COLOR_WINDOW_SIZE, currentColor);
-    initColorArray = false;
-    // Don't change the current color
-    return currentColor;
-  } else {
-    // The array must be reset whenever a new measurement is lower
-    // than the last one
-    if (currentColor < colorArray[COLOR_WINDOW_SIZE-1]) {
-      resetArray(colorArray, COLOR_WINDOW_SIZE, currentColor);
-      // Don't change the current color
-      return currentColor;
-    } else {
-      if (currentColor == RED && colorArray[COLOR_WINDOW_SIZE-1] == GREEN) {
-        appendToArray(colorArray, COLOR_WINDOW_SIZE, currentColor);
-
-        return currentColor;
-      } else if (currentColor == RED && colorArray[COLOR_WINDOW_SIZE-1] == RED) {
-        appendToArray(colorArray, COLOR_WINDOW_SIZE, currentColor);
-
-        return currentColor;
-      } else {
-        appendToArray(colorArray, COLOR_WINDOW_SIZE, currentColor);
-
-        // Calculate the average color
-        // This is possible since colors are represented by integers in the range 0-2
-        float averageColor = 0.0;
-        for (int i=0; i<COLOR_WINDOW_SIZE; i++) {
-          averageColor += colorArray[i];
-        }
-        averageColor /= float(COLOR_WINDOW_SIZE);
-
-        // Convert the floating point average to one of the defined colors
-        if (averageColor < 0.5) { // 0.0 <= averageColor < 0.5
-          return GREEN;
-        } else if (averageColor < 1.4) { // 0.5 <= averageColor < 1.4
-          return YELLOW;
-        } else { // averageColor >= 1.4
-          return RED;
-        }
-      }
-    }
-  }
-}
-
-// Update the LED color
-void setLEDColor(int color){
-  analogWrite(GREEN_LED_PIN, 255);
-  analogWrite(RED_LED_PIN, 255);
-  analogWrite(BLUE_LED_PIN, 255);
-
-  if(color == RED){
-    analogWrite(RED_LED_PIN, 0);
-  }
-  else if(color == GREEN){
-    analogWrite(GREEN_LED_PIN, 0);
-  }
-  else { // color == YELLOW
-    analogWrite(GREEN_LED_PIN, 100);
-    analogWrite(RED_LED_PIN, 0);
   }
 }
 
