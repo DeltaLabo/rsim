@@ -38,7 +38,7 @@
 //
 
 #define LEQ_PERIOD        2.0      // second(s)
-#define MIC_OFFSET_DB     1.3         // Offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration.
+#define MIC_OFFSET_DB     3.3         // Offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration.
 
 #define GREEN_UPPER_LIMIT  57.0 // dBA, maximum noise level for which the indicator stays green
 #define YELLOW_UPPER_LIMIT 70.0 // dBA, maximum noise level for which the indicator stays yellow
