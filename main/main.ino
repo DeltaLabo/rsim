@@ -4,12 +4,14 @@
 #include "driver/ledc.h"
 #include <Wire.h>
 #include <Adafruit_INA219.h>
+#include <String.h>
 
 #include "src/sos-iir-filter-xtensa.h"
 #include "src/slm-params.h"
 #include "src/pins.h"
 #include "src/mic-params.h"
 #include "src/color-control.h"
+#include "src/adafruit-io.h"
 
 // I2S peripheral to use (0 or 1)
 #define I2S_PORT          I2S_NUM_0
@@ -38,10 +40,6 @@ QueueHandle_t samples_queue;
 
 // Static buffer for block of samples
 float samples[SAMPLES_SHORT] __attribute__((aligned(4)));
-
-//
-// IIR Filters
-//
 
 // DC-Blocker filter - removes DC component from I2S data
 // See: https://www.dsprelated.com/freebooks/filters/DC_Blocker.html
@@ -75,11 +73,6 @@ SOS_IIR_Filter INMP441 = {
   }
 };
 
-
-//
-// Weighting filters
-//
-
 //
 // A-weighting IIR Filter, Fs = 48KHz 
 // (By Dr. Matt L., Source: https://dsp.stackexchange.com/a/36122)
@@ -94,9 +87,7 @@ SOS_IIR_Filter A_weighting = {
   }
 };
 
-//
 // I2S Microphone sampling setup 
-//
 void mic_i2s_init() {
   // Setup I2S to sample mono channel for SAMPLE_RATE * SAMPLE_BITS
   const i2s_config_t i2s_config = {
@@ -132,9 +123,7 @@ void mic_i2s_init() {
   i2s_set_pin(I2S_PORT, &pin_config);
 }
 
-//
 // I2S Reader Task
-//
 // Rationale for separate task reading I2S is that IIR filter
 // processing cam be scheduled to different core on the ESP32
 // while main task can do something else
@@ -142,7 +131,7 @@ void mic_i2s_init() {
 // As this is intended to run as separate high-priority task, 
 // we only do the minimum required work with the I2S data
 // until it is 'compressed' into sum of squares 
-//
+
 // FreeRTOS priority and stack sizes (in 32-bit words) 
 #define I2S_TASK_PRI   4
 #define I2S_TASK_STACK 2048
@@ -150,6 +139,8 @@ void mic_i2s_init() {
 #define LEQ_TASK_STACK 8096
 #define BAT_TASK_PRI 1
 #define BAT_TASK_STACK 2048
+#define WIFI_TASK_PRI 1
+#define WIFI_TASK_STACK 2048
 
 void mic_i2s_reader_task(void* parameter) {
   mic_i2s_init();
@@ -266,6 +257,12 @@ void leq_calculator_task(void* parameter) {
         if (Logging_leq > MIC_OVERLOAD_DB) Logging_leq = MIC_OVERLOAD_DB;
         else if (Logging_leq < MIC_NOISE_DB) Logging_leq = MIC_NOISE_DB;
 
+        #ifdef USE_LOGGING
+        logToAdafruitIO(String(Logging_leq), eq_feed_key);
+        logToAdafruitIO(String(Max_leq), max_feed_key);
+        logToAdafruitIO(String(Min_leq), min_feed_key);
+        #endif
+
         // Reset the sum of squares and sample counter
         Logging_sum_sqr = 0;
         Logging_samples = 0;
@@ -333,6 +330,9 @@ void setup() {
   // Init serial for logging
   Serial.begin(115200);
 
+  WiFi.begin(ssid, password);
+  vTaskDelay(pdMS_TO_TICKS(5000));
+
   // Create FreeRTOS queue
   samples_queue = xQueueCreate(8, sizeof(float));
 
@@ -358,7 +358,12 @@ void setup() {
 
   // Create the Leq calculator task and pin it to the second core (ID=1)
   xTaskCreatePinnedToCore(leq_calculator_task, "Leq Calculator", LEQ_TASK_STACK, NULL, LEQ_TASK_PRI, NULL, 1);
-  
+
+  #ifdef USE_LOGGING
+  // Create the WiFi connection task and pin it to the second core (ID=1)
+  xTaskCreatePinnedToCore(wifi_checker_task, "WiFi Checker", WIFI_TASK_STACK, NULL, WIFI_TASK_PRI, NULL, 1);
+  #endif
+
   vTaskDelay(pdMS_TO_TICKS(1000)); // Safety
 }
 
