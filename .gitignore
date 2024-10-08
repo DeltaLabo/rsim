@@ -58,3 +58,5 @@ autonomy_test*.csv
 .theia/
 .vscode/
 .pio/
+
+secrets.h
