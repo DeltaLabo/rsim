@@ -42,12 +42,23 @@ void logToAdafruitIO(String value_str, const char* feed_key) {
     // Check response
     if (httpResponseCode > 0) {
       String response = http.getString();
-      Serial.print("[INFO] [LOGGING]: Successfully logged data point to Adafruit IO feed ");
-      Serial.print(feed_key);
-      Serial.print(". ");
-      Serial.println(response);
+
+      bool errorOcurred = response.indexOf("error") >= 0;
+      if (!errorOcurred) {
+        Serial.print("[INFO] [LOGGING]: Successfully logged data point to Adafruit IO feed ");
+        Serial.print(feed_key);
+        Serial.print(". ");
+      } else {
+        Serial.print("[ERROR] [LOGGING]: Couldn't log data point to Adafruit IO feed ");
+        Serial.print(feed_key);
+        Serial.print(", HTTP code: ");
+        Serial.print(httpResponseCode);
+        Serial.println(".");
+      }
     } else {
-      Serial.print("[ERROR] [LOGGING]: Couldn't log data point to Adafruit IO, HTTP code: ");
+      Serial.print("[ERROR] [LOGGING]: Couldn't log data point to Adafruit IO feed ");
+      Serial.print(feed_key);
+      Serial.print(", HTTP code: ");
       Serial.print(httpResponseCode);
       Serial.println(".");
     }
