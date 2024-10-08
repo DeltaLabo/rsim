@@ -5,7 +5,7 @@
 #define SLM_PARAMS_H
 
 // Periods
-#define LOGGING_PERIOD 16.0 // second(s)
+#define LOGGING_PERIOD 5.0 // second(s)
 #define RTC_UPDATE_PERIOD 3600000 // millisecond(s), 1 hour
 #define ESP32_RESTART_PERIOD 86400000 // millisecond(s), 24 hours
 #define BATTERY_CHECK_PERIOD 60000 // millisecond(s), 1 minute
@@ -32,6 +32,7 @@
 
 // Comment to disable
 //#define USE_BATTERY
+#define USE_LOGGING
 
 //
 // SLM Configuration
