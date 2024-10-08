@@ -7,14 +7,14 @@
 
 #define MAX_WIFI_RECONNECTION_ATTEMPTS 3
 
-#define ssid = "LaboratorioDelta"
-#define password = "labdelta21!"
-#define io_key = "aio_OAqO45kIs4r2yFebfjZJ7hhQHD2r"
-#define username = "delta_lab"
+#define ssid "LaboratorioDelta"
+#define password "labdelta21!"
+#define io_key "aio_OAqO45kIs4r2yFebfjZJ7hhQHD2r"
+#define username "delta_lab"
 
-#define eq_feed_key = "equivalent-noise-level"
-#define max_feed_key = "maximum-noise-level"
-#define min_feed_key = "minimum-noise-level"
+#define eq_feed_key "equivalent-noise-level"
+#define max_feed_key "maximum-noise-level"
+#define min_feed_key "minimum-noise-level"
 
 #define WIFI_CHECK_PERIOD 30000 // ms
 
