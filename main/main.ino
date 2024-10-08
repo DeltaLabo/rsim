@@ -246,7 +246,7 @@ void leq_calculator_task(void* parameter) {
 
       Serial.print("[INFO] [SLM]: Local reading (dBA): ");
       Serial.print(Leq_dB);
-      Serial.print(", Color: ");
+      Serial.print(" dBA, Color: ");
       Serial.println(currentColor);
 
       // ThingSpeak data calculation
@@ -338,6 +338,10 @@ void setup() {
 
   #ifdef USE_BATTERY
   Wire.begin(INA_SDA, INA_SCL); // SDA, SCL
+
+  Serial.print("[INFO] [SLM]: Mic offset: ");
+  Serial.print(MIC_OFFSET_DB);
+  Serial.println(" dBA");
 
   // Initialize the INA219.
   // By default the initialization will use the largest range (32V, 2A).  However
