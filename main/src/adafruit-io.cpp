@@ -1,5 +1,8 @@
 #include "adafruit-io.h"
 
+
+extern QueueHandle_t logging_queue;
+
 void wifi_checker_task(void* parameter) {
     TickType_t lastWakeTime = xTaskGetTickCount();
     while (true) {
@@ -24,7 +27,7 @@ void wifi_checker_task(void* parameter) {
     }
 }
 
-void logToAdafruitIO(String value_str, const char* feed_key) {
+void logToAdafruitIO(const String &value_str, const String &feed_key) {
   // Send HTTP POST request
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
@@ -47,12 +50,12 @@ void logToAdafruitIO(String value_str, const char* feed_key) {
       if (!errorOcurred) {
         Serial.print("[INFO] [LOGGING]: Successfully logged data point to Adafruit IO feed ");
         Serial.print(feed_key);
-        Serial.print(". ");
+        Serial.println(". ");
       } else {
         Serial.print("[ERROR] [LOGGING]: Couldn't log data point to Adafruit IO feed ");
         Serial.print(feed_key);
-        Serial.print(", HTTP code: ");
-        Serial.print(httpResponseCode);
+        Serial.print(", Error: ");
+        Serial.print(response);
         Serial.println(".");
       }
     } else {
@@ -67,5 +70,14 @@ void logToAdafruitIO(String value_str, const char* feed_key) {
     http.end();
   } else {
     Serial.println("[ERROR] [LOGGING]: Couldn't connect to WiFi.");
+  }
+}
+
+void logger_task(void* parameter) {
+  LogData logData;
+  while (true) {
+    if (xQueueReceive(logging_queue, &logData, portMAX_DELAY)) {
+      logToAdafruitIO(logData.value, logData.feedKey);
+    }
   }
 }
