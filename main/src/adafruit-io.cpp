@@ -24,11 +24,11 @@ void wifi_checker_task(void* parameter) {
     }
 }
 
-void logToAdafruitIO(const char* value_str, const char* feed_key) {
+void logToAdafruitIO(String value_str, const char* feed_key) {
   // Send HTTP POST request
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
-    String url = String("https://io.adafruit.com/api/v2/") + username + "/feeds/" + feed_key + "/data";
+    String url = String("https://io.adafruit.com/api/v2/") + username + "/feeds/" + aio_group + "." + feed_key + "/data";
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
     http.addHeader("X-AIO-Key", io_key);
@@ -42,9 +42,10 @@ void logToAdafruitIO(const char* value_str, const char* feed_key) {
     // Check response
     if (httpResponseCode > 0) {
       String response = http.getString();
-      Serial.println("[INFO] [LOGGING]: Successfully logged data point to Adafruit IO feed ");
+      Serial.print("[INFO] [LOGGING]: Successfully logged data point to Adafruit IO feed ");
       Serial.print(feed_key);
-      Serial.println(".");
+      Serial.print(". ");
+      Serial.println(response);
     } else {
       Serial.print("[ERROR] [LOGGING]: Couldn't log data point to Adafruit IO, HTTP code: ");
       Serial.print(httpResponseCode);
