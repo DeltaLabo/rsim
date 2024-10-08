@@ -1,5 +1,20 @@
 #include "color-control.h"
 
+// Previous local color indication
+// Used to avoid setting the LEDs to the same color
+// they already were
+// Initialized to a null value
+int prevColor = -1;
+
+
+// Init pins used to control the color indicator
+void initColorPins() {
+  // ledc (PWM) frequency and resolution setup
+  ledcAttach(RED_LED_PIN, LEDC_FREQ, LEDC_RESOLUTION);
+  ledcAttach(GREEN_LED_PIN, LEDC_FREQ, LEDC_RESOLUTION);
+  ledcAttach(BLUE_LED_PIN, LEDC_FREQ, LEDC_RESOLUTION);
+}
+
 // Convert a sound measurement in decibels to a color code
 int leqToColor(float Leq_dB){
   if (Leq_dB < GREEN_UPPER_LIMIT) {
@@ -76,18 +91,22 @@ int updateColorArray(int currentColor) {
 
 // Update the LED color
 void setLEDColor(int color){
-  analogWrite(GREEN_LED_PIN, 255);
-  analogWrite(RED_LED_PIN, 255);
-  analogWrite(BLUE_LED_PIN, 255);
+  if (color != prevColor) {
+    prevColor = color;
 
-  if(color == RED){
-    analogWrite(RED_LED_PIN, 0);
-  }
-  else if(color == GREEN){
-    analogWrite(GREEN_LED_PIN, 0);
-  }
-  else { // color == YELLOW
-    analogWrite(GREEN_LED_PIN, 100);
-    analogWrite(RED_LED_PIN, 0);
+    analogWrite(GREEN_LED_PIN, 255);
+    analogWrite(RED_LED_PIN, 255);
+    analogWrite(BLUE_LED_PIN, 255);
+
+    if(color == RED){
+      analogWrite(RED_LED_PIN, 0);
+    }
+    else if(color == GREEN){
+      analogWrite(GREEN_LED_PIN, 0);
+    }
+    else { // color == YELLOW
+      analogWrite(GREEN_LED_PIN, 100);
+      analogWrite(RED_LED_PIN, 0);
+    }
   }
 }
