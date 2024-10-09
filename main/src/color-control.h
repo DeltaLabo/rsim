@@ -27,7 +27,4 @@ int updateColorArray(int currentColor);
 void setLEDColor(int color);
 void initColorPins();
 
-extern int colorArray[];
-extern bool initColorArray;
-
 #endif // COLOR_CONTROL_H

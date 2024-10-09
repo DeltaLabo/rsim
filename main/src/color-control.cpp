@@ -1,10 +1,16 @@
 #include "color-control.h"
 
+
 // Previous local color indication
 // Used to avoid setting the LEDs to the same color
 // they already were
 // Initialized to a null value
 int prevColor = -1;
+
+// Last measurements collected, converted to color
+int colorArray[COLOR_WINDOW_SIZE];
+// Flag to reset the values stored in the array
+bool initColorArray = true;
 
 
 // Init pins used to control the color indicator
