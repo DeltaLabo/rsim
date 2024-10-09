@@ -1,17 +1,11 @@
 // Parameter file for the dB meter
 // These are in a separate file to avoid updating the versioned main.ino file just to change them
 
-#ifndef SLM_H
-#define SLM_H
+#ifndef SLM_PARAMS_H
+#define SLM_PARAMS_H
 
 #include <math.h>
-#include "driver/i2s.h"
-#include <Arduino.h>
 
-#include "pins.h"
-#include "log-data.h"
-#include "color-control.h"
-#include "sos-iir-filter-xtensa.h"
 
 // I2S peripheral to use (0 or 1)
 #define I2S_PORT          I2S_NUM_0
@@ -44,8 +38,4 @@ constexpr double MIC_REF_AMPL = pow(10, double(MIC_SENSITIVITY)/20) * ((1<<(MIC_
 #define DMA_BANK_SIZE     (SAMPLES_SHORT / 16)
 #define DMA_BANKS         32
 
-void mic_i2s_init();
-void mic_i2s_reader_task(void* parameter);
-void leq_calculator_task(void* parameter);
-
-#endif // SLM_H
+#endif // SLM_PARAMS_H
