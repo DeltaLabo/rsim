@@ -174,30 +174,4 @@ struct SOS_IIR_Filter {
 
 };
 
-//
-// For testing only
-//
-struct No_IIR_Filter {  
-  const int num_sos = 0;
-  const float gain = 1.0;
-
-  No_IIR_Filter() {};
-
-  inline float filter(float* input, float* output, size_t len) {
-    float sum_sqr = 0;
-    float s;
-    for(int i=0; i<len; i++) {
-      s = input[i];
-      sum_sqr += s * s;
-    }
-    if (input != output) {
-      for(int i=0; i<len; i++) output[i] = input[i];
-    }
-    return sum_sqr;
-  };
-  
-};
-
-No_IIR_Filter None;
-
 #endif // SOS_IIR_FILTER_H
