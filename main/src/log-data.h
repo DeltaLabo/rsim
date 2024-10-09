@@ -1,4 +1,3 @@
-// log_data.h
 #ifndef LOG_DATA_H
 #define LOG_DATA_H
 
