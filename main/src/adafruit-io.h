@@ -14,12 +14,7 @@
 #define ssid "LaboratorioDelta"
 // WiFi password and AIO key defined in secrets.h
 #define username "delta_lab"
-
 #define aio_group "rsim-v3-max-peralta"
-
-#define eq_feed_key "equivalent-noise-level"
-#define max_feed_key "maximum-noise-level"
-#define min_feed_key "minimum-noise-level"
 
 #define WIFI_CHECK_PERIOD 30000 // ms
 
