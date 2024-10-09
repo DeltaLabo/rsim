@@ -1,8 +1,6 @@
 #ifndef PINS_H
 #define PINS_H
 
-#include "slm-params.h"
-
 #define I2S_WS  13
 #define I2S_SCK 12
 #define I2S_SD  11
@@ -15,4 +13,5 @@
 
 #define INA_SDA 3
 #define INA_SCL 8
+
 #endif
