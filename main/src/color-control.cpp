@@ -19,6 +19,10 @@ void initColorPins() {
   ledcAttach(RED_LED_PIN, LEDC_FREQ, LEDC_RESOLUTION);
   ledcAttach(GREEN_LED_PIN, LEDC_FREQ, LEDC_RESOLUTION);
   ledcAttach(BLUE_LED_PIN, LEDC_FREQ, LEDC_RESOLUTION);
+
+  analogWrite(RED_LED_PIN, 255);
+  analogWrite(GREEN_LED_PIN, 255);
+  analogWrite(BLUE_LED_PIN, 0);
 }
 
 // Convert a sound measurement in decibels to a color code
