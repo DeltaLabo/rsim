@@ -4,33 +4,33 @@
 extern QueueHandle_t logging_queue;
 
 void wifi_checker_task(void* parameter) {
-    TickType_t lastWakeTime = xTaskGetTickCount();
-    while (true) {
-        if (WiFi.status() != WL_CONNECTED) {
-            Serial.println("[INFO] [WIFI]: Not connected, attempting to connect.");
-            WiFi.begin(ssid, password);
+  while (true) {
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("[INFO] [WIFI]: Not connected, attempting to connect.");
 
-            // Attempt to connect with limited retries
-            for (int i = 0; i < MAX_WIFI_RECONNECTION_ATTEMPTS && WiFi.status() != WL_CONNECTED; i++) {
-                vTaskDelay(pdMS_TO_TICKS(5000)); // Delay between reconnection attempts
-            }
+      int attemptCounter = 0;
+      do {
+        WiFi.begin(ssid, password);
+        attemptCounter++;
+        vTaskDelay(pdMS_TO_TICKS(5000));
+      } while (WiFi.status() != WL_CONNECTED && attemptCounter<MAX_WIFI_RECONNECTION_ATTEMPTS);
 
-            if (WiFi.status() == WL_CONNECTED) {
-                Serial.println("[INFO] [WIFI]: Connected to WiFi.");
-            } else {
-                Serial.println("[ERROR] [WIFI]: Couldn't connect to WiFi.");
-            }
-        }
-
-        // Wait for the next check period
-        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(WIFI_CHECK_PERIOD));
+      if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("[INFO] [WIFI]: Connected to WiFi.");
+      } else {
+        Serial.println("[ERROR] [WIFI]: Couldn't connect to WiFi. Will retry later.");
+      }
     }
+    // Wait for the next check period
+    vTaskDelay(pdMS_TO_TICKS(WIFI_CHECK_PERIOD));
+  }
 }
 
 void logToAdafruitIO(const String &value_str, const String &feed_key) {
   // Send HTTP POST request
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
+    http.setTimeout(2000); // ms
     String url = String("https://io.adafruit.com/api/v2/") + username + "/feeds/" + aio_group + "." + feed_key + "/data";
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
@@ -39,6 +39,7 @@ void logToAdafruitIO(const String &value_str, const String &feed_key) {
     // Data to send with POST request
     String httpRequestData = String("{\"value\": ") + value_str + String("}");
 
+    Serial.println("[INFO] [LOGGING]: Attempted to log to Adafruit IO.");
     // Send POST request
     int httpResponseCode = http.POST(httpRequestData);
 
