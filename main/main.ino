@@ -18,15 +18,15 @@ QueueHandle_t logging_queue;
 
 
 // FreeRTOS priority and stack sizes (in 32-bit words) 
-#define I2S_TASK_PRI   4
+#define I2S_TASK_PRI   5
 #define I2S_TASK_STACK 4096
-#define LEQ_TASK_PRI   3
+#define LEQ_TASK_PRI   5
 #define LEQ_TASK_STACK 8096
 #define BAT_TASK_PRI 1
 #define BAT_TASK_STACK 4096
 #define WIFI_TASK_PRI 1
 #define WIFI_TASK_STACK 4096
-#define LOGGER_TASK_PRI 1
+#define LOGGER_TASK_PRI 3
 #define LOGGER_TASK_STACK 4096
 
 
