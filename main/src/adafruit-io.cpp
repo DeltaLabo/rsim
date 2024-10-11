@@ -3,6 +3,8 @@
 
 extern QueueHandle_t logging_queue;
 
+HTTPClient http;
+
 void wifi_checker_task(void* parameter) {
   while (true) {
     if (WiFi.status() != WL_CONNECTED) {
@@ -29,17 +31,16 @@ void wifi_checker_task(void* parameter) {
 void logToAdafruitIO(const String &value_str, const String &feed_key) {
   // Send HTTP POST request
   if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    http.setTimeout(2000); // ms
     String url = String("https://io.adafruit.com/api/v2/") + username + "/feeds/" + aio_group + "." + feed_key + "/data";
     http.begin(url);
+    http.setConnectTimeout(3000); // ms
+    http.setTimeout(1); // s
     http.addHeader("Content-Type", "application/json");
     http.addHeader("X-AIO-Key", io_key);
 
     // Data to send with POST request
     String httpRequestData = String("{\"value\": ") + value_str + String("}");
 
-    Serial.println("[INFO] [LOGGING]: Attempted to log to Adafruit IO.");
     // Send POST request
     int httpResponseCode = http.POST(httpRequestData);
 
@@ -64,6 +65,10 @@ void logToAdafruitIO(const String &value_str, const String &feed_key) {
       Serial.print(feed_key);
       Serial.print(", HTTP code: ");
       Serial.print(httpResponseCode);
+      if (httpResponseCode == -1) {Serial.print(" (connection refused)");}
+      else if (httpResponseCode == -4) {Serial.print(" (not connected)");}
+      else if (httpResponseCode == -5) {Serial.print(" (connection lost)");}
+      else if (httpResponseCode == -11) {Serial.print(" (timeout)");}
       Serial.println(".");
     }
 
