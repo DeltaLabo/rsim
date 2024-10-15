@@ -22,7 +22,7 @@ void initColorPins() {
 
   analogWrite(RED_LED_PIN, 255);
   analogWrite(GREEN_LED_PIN, 255);
-  analogWrite(BLUE_LED_PIN, 0);
+  analogWrite(BLUE_LED_PIN, 255);
 }
 
 // Convert a sound measurement in decibels to a color code
