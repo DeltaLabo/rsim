@@ -2,11 +2,12 @@
 #include "secrets.h"
 
 WiFiClient client;
+
 const char* host = "io.adafruit.com";
 const int port = 80; // For HTTP. Use WiFiClientSecure if HTTPS is needed
 
 // State variables to manage request and response
-bool waitingForResponse = false;
+uint8_t pendingResponses = 0;
 unsigned long requestTimer = 0;
 unsigned long logTimer = 0;
 
@@ -45,8 +46,8 @@ void logToAdafruitIO(const String &value_str, const String &feed_key) {
 
     Serial.println("[INFO] [LOGGING]: Attempting to log to Adafruit IO.");
 
-    // Set the state to indicate we're waiting for a response
-    waitingForResponse = true;
+    // Increase the counter to indicate we're waiting for a response
+    pendingResponses++;
     requestTimer = millis(); // Record the time the request was sent
   } else {
     Serial.println("[ERROR] [LOGGING]: Couldn't connect to WiFi.");
@@ -54,12 +55,12 @@ void logToAdafruitIO(const String &value_str, const String &feed_key) {
 }
 
 void checkForResponse() {
-  if (waitingForResponse) {
+  if (pendingResponses > 0) {
     // Timeout handling
     if (millis() - requestTimer > 5000) { // 5-second timeout
       Serial.println("[ERROR] [LOGGING]: Response timeout.");
       client.stop();
-      waitingForResponse = false;
+      pendingResponses--;
       return;
     }
 
@@ -83,7 +84,7 @@ void checkForResponse() {
       }
 
       client.stop();  // Close the connection
-      waitingForResponse = false;  // Reset the state
+      pendingResponses--;  // Reset the state
     }
   }
 }
