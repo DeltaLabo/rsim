@@ -27,7 +27,7 @@ QueueHandle_t logging_queue;
 #define WIFI_TASK_PRI 1
 #define WIFI_TASK_STACK 4096
 #define LOGGER_TASK_PRI 3
-#define LOGGER_TASK_STACK 4096
+#define LOGGER_TASK_STACK 8096
 
 
 void setup() {
