@@ -2,8 +2,13 @@
 
 
 extern QueueHandle_t logging_queue;
+extern SemaphoreHandle_t loggingMutex;
 
-HTTPClient http;
+WiFiClient client;
+
+// State variables to manage request and response
+uint8_t pendingResponses = 0;
+uint32_t responseTimer = 0;
 
 void wifi_checker_task(void* parameter) {
   while (true) {
@@ -29,61 +34,99 @@ void wifi_checker_task(void* parameter) {
 }
 
 void logToAdafruitIO(const String &value_str, const String &feed_key) {
-  // Send HTTP POST request
   if (WiFi.status() == WL_CONNECTED) {
-    String url = String("https://io.adafruit.com/api/v2/") + username + "/feeds/" + aio_group + "." + feed_key + "/data";
-    http.begin(url);
-    http.setConnectTimeout(3000); // ms
-    http.setTimeout(1); // s
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("X-AIO-Key", io_key);
+    // Construct URL and payload
+    String url = String("/api/v2/") + username + "/feeds/" + aio_group + "." + feed_key + "/data";
+    String payload = "{\"value\": " + value_str + "}";
 
-    // Data to send with POST request
-    String httpRequestData = String("{\"value\": ") + value_str + String("}");
-
-    // Send POST request
-    int httpResponseCode = http.POST(httpRequestData);
-
-    // Check response
-    if (httpResponseCode > 0) {
-      String response = http.getString();
-
-      bool errorOcurred = response.indexOf("error") >= 0;
-      if (!errorOcurred) {
-        Serial.print("[INFO] [LOGGING]: Successfully logged data point to Adafruit IO feed ");
-        Serial.print(feed_key);
-        Serial.println(". ");
-      } else {
-        Serial.print("[ERROR] [LOGGING]: Couldn't log data point to Adafruit IO feed ");
-        Serial.print(feed_key);
-        Serial.print(", Error: ");
-        Serial.print(response);
-        Serial.println(".");
+    if (xSemaphoreTake(loggingMutex, portMAX_DELAY)) {
+      if (!client.connect("io.adafruit.com", 80)) { // port 80 for HTTP
+        Serial.println("[ERROR] [LOGGING]: Couldn't connect to Adafruit IO.");
+        return;
       }
-    } else {
-      Serial.print("[ERROR] [LOGGING]: Couldn't log data point to Adafruit IO feed ");
-      Serial.print(feed_key);
-      Serial.print(", HTTP code: ");
-      Serial.print(httpResponseCode);
-      if (httpResponseCode == -1) {Serial.print(" (connection refused)");}
-      else if (httpResponseCode == -4) {Serial.print(" (not connected)");}
-      else if (httpResponseCode == -5) {Serial.print(" (connection lost)");}
-      else if (httpResponseCode == -11) {Serial.print(" (timeout)");}
-      Serial.println(".");
-    }
 
-    // End HTTP connection
-    http.end();
+      // Send the HTTP POST request
+      client.println("POST " + url + " HTTP/1.1");
+      client.println("Host: io.adafruit.com");
+      client.println("Content-Type: application/json");
+      client.print("Content-Length: ");
+      client.println(payload.length());
+      client.print("X-AIO-Key: ");
+      client.println(io_key);
+      client.println(); // End of headers
+      client.println(payload); // Body data
+
+      Serial.println("[INFO] [LOGGING]: Attempting to log to Adafruit IO.");
+
+      // Increase the counter to indicate we're waiting for a response
+      pendingResponses++;
+
+      if (pendingResponses == 0) {
+        // Reset the time counter
+        responseTimer = xTaskGetTickCount();
+      }
+      
+      xSemaphoreGive(loggingMutex);  // Release the mutex
+    }
   } else {
     Serial.println("[ERROR] [LOGGING]: Couldn't connect to WiFi.");
+  }
+}
+
+void checkForHTTPResponse() {
+  if (pendingResponses > 0) {
+    uint32_t currentTime = xTaskGetTickCount();
+
+    // Timeout handling
+    if ((currentTime - responseTimer) > pdMS_TO_TICKS(HTTP_RESPONSE_TIMEOUT)) {
+      Serial.println("[ERROR] [LOGGING]: Adafruit IO response timeout.");
+      // Safely access shared resources
+      if (xSemaphoreTake(loggingMutex, portMAX_DELAY)) {
+        client.stop();
+        pendingResponses--;
+
+        xSemaphoreGive(loggingMutex);
+      }
+      return;
+    }
+
+    if (xSemaphoreTake(loggingMutex, portMAX_DELAY)) {
+      // If the client has data, process the response
+      if (client.available()) {
+        while (client.available()) {
+          String line = client.readStringUntil('\n');
+          if (line == "\r") {
+            break; // Headers end at a blank line
+          }
+        }
+
+        String response = client.readString(); // Read the response body
+        bool errorOccurred = response.indexOf("error") >= 0;
+        if (!errorOccurred) {
+          Serial.println("[INFO] [LOGGING]: Successfully logged data point to Adafruit IO.");
+        } else {
+          Serial.print("[ERROR] [LOGGING]: Failed to log data. Response: ");
+          Serial.println(response);
+        }
+
+        client.stop();
+
+        pendingResponses--;
+
+        xSemaphoreGive(loggingMutex);
+      }
+    }
   }
 }
 
 void logger_task(void* parameter) {
   LogData logData;
   while (true) {
-    if (xQueueReceive(logging_queue, &logData, portMAX_DELAY)) {
+    // Wait 50 ms for new data to arrive
+    if (xQueueReceive(logging_queue, &logData, pdMS_TO_TICKS(50))) {
       logToAdafruitIO(logData.value, logData.feedKey);
+    } else {
+      checkForHTTPResponse();
     }
   }
 }
