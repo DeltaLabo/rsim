@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include <semphr.h>
 #include "driver/i2s.h"
 #include <stdint.h>
 
@@ -17,18 +16,15 @@ bool USE_LOGGING = true;
 QueueHandle_t samples_queue;
 QueueHandle_t logging_queue;
 
-SemaphoreHandle_t loggingMutex;
-
 
 // FreeRTOS priority and stack sizes (in 32-bit words) 
 #define I2S_TASK_PRI 5
 #define I2S_TASK_STACK 4096
 #define LEQ_TASK_PRI 5
-#define LEQ_TASK_STACK 8192
+#define LEQ_TASK_STACK 8096
 #define BAT_TASK_PRI 1
 #define BAT_TASK_STACK 4096
 #define WIFI_TASK_PRI 1
-
 #define WIFI_TASK_STACK 4096
 #define LOGGER_TASK_PRI 3
 #define LOGGER_TASK_STACK 8192
@@ -36,14 +32,14 @@ SemaphoreHandle_t loggingMutex;
 
 void setup() {
   setCpuFrequencyMhz(240);
-  
-  initColorPins();
 
   // Init serial for logging
   Serial.begin(115200);
 
   // Create FreeRTOS queue
   samples_queue = xQueueCreate(8, sizeof(float));
+
+  initColorPins();
 
   if (USE_BATTERY) {
     xTaskCreatePinnedToCore(battery_checker_task, "Battery Checker", BAT_TASK_STACK, NULL, BAT_TASK_PRI, NULL, 1);
@@ -57,9 +53,6 @@ void setup() {
     
     // Initialize the logging queue
     logging_queue = xQueueCreate(10, sizeof(LogData));
-    // Create a mutex for parallel logging tasks
-    loggingMutex = xSemaphoreCreateMutex();
-
     // Create the logger task and pin it to the second core (ID=1)
     xTaskCreatePinnedToCore(logger_task, "Logger", LOGGER_TASK_STACK, NULL, LOGGER_TASK_STACK, NULL, 1);
   } else {
