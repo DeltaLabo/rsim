@@ -21,7 +21,7 @@ QueueHandle_t logging_queue;
 #define I2S_TASK_PRI 5
 #define I2S_TASK_STACK 4096
 #define LEQ_TASK_PRI 5
-#define LEQ_TASK_STACK 8096
+#define LEQ_TASK_STACK 8192
 #define BAT_TASK_PRI 1
 #define BAT_TASK_STACK 4096
 #define WIFI_TASK_PRI 1
@@ -32,14 +32,14 @@ QueueHandle_t logging_queue;
 
 void setup() {
   setCpuFrequencyMhz(240);
+  
+  initColorPins();
 
   // Init serial for logging
   Serial.begin(115200);
 
   // Create FreeRTOS queue
-  samples_queue = xQueueCreate(8, sizeof(float));
-
-  initColorPins();
+  samples_queue = xQueueCreate(100, sizeof(float));
 
   if (USE_BATTERY) {
     xTaskCreatePinnedToCore(battery_checker_task, "Battery Checker", BAT_TASK_STACK, NULL, BAT_TASK_PRI, NULL, 1);
@@ -50,11 +50,12 @@ void setup() {
   if (USE_LOGGING) {
     // Create the WiFi connection task and pin it to the second core (ID=1)
     xTaskCreatePinnedToCore(wifi_checker_task, "WiFi Checker", WIFI_TASK_STACK, NULL, WIFI_TASK_PRI, NULL, 1);
-    
+  
     // Initialize the logging queue
-    logging_queue = xQueueCreate(10, sizeof(LogData));
+    logging_queue = xQueueCreate(25, sizeof(LogData));
+
     // Create the logger task and pin it to the second core (ID=1)
-    xTaskCreatePinnedToCore(logger_task, "Logger", LOGGER_TASK_STACK, NULL, LOGGER_TASK_STACK, NULL, 1);
+    xTaskCreatePinnedToCore(logger_task, "Logger", LOGGER_TASK_STACK, NULL, LOGGER_TASK_PRI, NULL, 1);
   } else {
     Serial.println("[INFO] [LOGGING]: Logging disabled.");
   }
