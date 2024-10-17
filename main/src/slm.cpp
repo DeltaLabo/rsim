@@ -204,6 +204,8 @@ void mic_i2s_reader_task(void* parameter) {
 }
 
 void leq_calculator_task(void* parameter) {
+  initColorPins();
+
   // Queue object for microphone data
   float sum_sqr_weighted;
   // Counter for the amount of samples read in a single measurement period

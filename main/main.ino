@@ -3,7 +3,6 @@
 #include <stdint.h>
 
 #include "src/slm.h"
-#include "src/color-control.h"
 #include "src/adafruit-io.h"
 #include "src/battery-checker.h"
 
@@ -32,8 +31,6 @@ QueueHandle_t logging_queue;
 
 void setup() {
   setCpuFrequencyMhz(240);
-  
-  initColorPins();
 
   // Init serial for logging
   Serial.begin(115200);
@@ -41,13 +38,13 @@ void setup() {
   // Create FreeRTOS queue
   samples_queue = xQueueCreate(100, sizeof(float));
 
-  if (USE_BATTERY) {
+  if (USE_BATTERY == true) {
     xTaskCreatePinnedToCore(battery_checker_task, "Battery Checker", BAT_TASK_STACK, NULL, BAT_TASK_PRI, NULL, 1);
   } else {
     Serial.println("[INFO] [POWER]: Battery checking disabled.");
   }
 
-  if (USE_LOGGING) {
+  if (USE_LOGGING == true) {
     // Create the WiFi connection task and pin it to the second core (ID=1)
     xTaskCreatePinnedToCore(wifi_checker_task, "WiFi Checker", WIFI_TASK_STACK, NULL, WIFI_TASK_PRI, NULL, 1);
   
