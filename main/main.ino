@@ -6,7 +6,7 @@
 #include "src/adafruit-io.h"
 #include "src/battery-checker.h"
 
-#include "checks.h"
+#include "src/checks.h"
 
 
 // Set to enable/disable functionality
@@ -32,6 +32,8 @@ QueueHandle_t logging_queue;
 
 
 void setup() {
+  //runtimeChecks();
+
   setCpuFrequencyMhz(240);
 
   // Init serial for logging
