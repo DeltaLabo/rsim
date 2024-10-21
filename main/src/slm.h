@@ -13,18 +13,21 @@
 #include "color-control.h"
 #include "log-data.h"
 
+
+// SLM Configuration
+#define LEQ_PERIOD 2.0 // second(s)
+#define LOGGING_PERIOD 20.0 // second(s)
+#define MIC_OFFSET_DB 1.3 // Offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration.
+
 // Adafruit IO feed keys for logging
 #define eq_feed_key "equivalent-noise-level"
 #define max_feed_key "maximum-noise-level"
 #define min_feed_key "minimum-noise-level"
 
+#define LOGGING_QUEUE_SIZE 25
+
 // I2S peripheral to use (0 or 1)
 #define I2S_PORT          I2S_NUM_0
-
-// SLM Configuration
-#define LEQ_PERIOD 2.0 // second(s)
-#define LOGGING_PERIOD 5.0 // second(s)
-#define MIC_OFFSET_DB 1.3 // Offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration.
 
 // Values taken from microphone datasheet
 #define MIC_SENSITIVITY   -26         // dBFS value expected at MIC_REF_DB (Sensitivity value from datasheet)

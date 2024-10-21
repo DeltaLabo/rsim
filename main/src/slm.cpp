@@ -227,9 +227,6 @@ void leq_calculator_task(void* parameter) {
   // Initialized to a value that's higher than any possible measurement
   double Min_leq = MIC_OVERLOAD_DB + 1.0;
 
-  // Data container for logging operations
-  LogData logdata;
-
   Serial.print("[INFO] [SLM]: Mic offset (dBA): ");
   Serial.print(MIC_OFFSET_DB);
   Serial.println(".");
@@ -285,14 +282,14 @@ void leq_calculator_task(void* parameter) {
         else if (Logging_leq < MIC_NOISE_DB) Logging_leq = MIC_NOISE_DB;
 
         if (USE_LOGGING) {
-          logdata = {String(Logging_leq), eq_feed_key};
-          xQueueSend(logging_queue, &logdata, portMAX_DELAY);
+          LogData logdata_eq = {String(Logging_leq), eq_feed_key};
+          xQueueSend(logging_queue, &logdata_eq, portMAX_DELAY);
 
-          logdata = {String(Max_leq), max_feed_key};
-          xQueueSend(logging_queue, &logdata, portMAX_DELAY);
+          LogData logdata_max = {String(Max_leq), max_feed_key};
+          xQueueSend(logging_queue, &logdata_max, portMAX_DELAY);
 
-          logdata = {String(Min_leq), min_feed_key};
-          xQueueSend(logging_queue, &logdata, portMAX_DELAY);
+          LogData logdata_min = {String(Min_leq), min_feed_key};
+          xQueueSend(logging_queue, &logdata_min, portMAX_DELAY);
         }
 
         // Reset the sum of squares and sample counter

@@ -21,7 +21,7 @@
 
 
 void wifi_checker_task(void* parameter);
-void logToAdafruitIO(const String &value_str, const String &feed_key);
+void logToAdafruitIO(const String &value_str, const char* feed_key);
 void logger_task(void* parameter);
 void checkForHTTPResponse();
 

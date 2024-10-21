@@ -6,6 +6,8 @@
 #include "src/adafruit-io.h"
 #include "src/battery-checker.h"
 
+#include "src/checks.h"
+
 
 // Set to enable/disable functionality
 bool USE_BATTERY = false;
@@ -35,6 +37,11 @@ void setup() {
   // Init serial for logging
   Serial.begin(115200);
 
+  if (runtimeChecks() == false) {
+    Serial.println("[ERROR]: Cannot start with invalid parameters.");
+    while (true) {} // Halt indefinitely
+  }
+
   // Create FreeRTOS queue
   samples_queue = xQueueCreate(100, sizeof(float));
 
@@ -49,7 +56,7 @@ void setup() {
     xTaskCreatePinnedToCore(wifi_checker_task, "WiFi Checker", WIFI_TASK_STACK, NULL, WIFI_TASK_PRI, NULL, 1);
   
     // Initialize the logging queue
-    logging_queue = xQueueCreate(25, sizeof(LogData));
+    logging_queue = xQueueCreate(LOGGING_QUEUE_SIZE, sizeof(LogData));
 
     // Create the logger task and pin it to the second core (ID=1)
     xTaskCreatePinnedToCore(logger_task, "Logger", LOGGER_TASK_STACK, NULL, LOGGER_TASK_PRI, NULL, 1);

@@ -5,8 +5,8 @@
 
 // Container class for logged values, with their Adafruit IO key
 struct LogData {
-    String value;
-    String feedKey;
+  String value;
+  const char* feedKey;
 };
 
 #endif // LOG_DATA_H
