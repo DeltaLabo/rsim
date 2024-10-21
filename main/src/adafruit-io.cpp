@@ -34,7 +34,7 @@ void wifi_checker_task(void* parameter) {
   }
 }
 
-void logToAdafruitIO(const String &value_str, const String &feed_key) {
+void logToAdafruitIO(const String &value_str, const char* feed_key) {
   if (WiFi.status() == WL_CONNECTED) {
     // Construct URL and payload
     String url = String("/api/v2/") + username + "/feeds/" + aio_group + "." + feed_key + "/data";
@@ -56,7 +56,10 @@ void logToAdafruitIO(const String &value_str, const String &feed_key) {
     client.println(); // End of headers
     client.println(payload); // Body data
 
-    Serial.println("[INFO] [LOGGING]: Attempting to log to Adafruit IO.");
+    Serial.print("[INFO] [LOGGING]: Attempting to log to Adafruit IO feed ");
+    Serial.print(feed_key);
+    Serial.print(", value (dBA): ");
+    Serial.println(value_str);
 
     // Indicate that there's a pending HTTP response
     WiFiClientBusy = true;
@@ -90,7 +93,14 @@ void checkForHTTPResponse() {
       String response = client.readString(); // Read the response body
       bool errorOccurred = response.indexOf("error") >= 0;
       if (!errorOccurred) {
-        Serial.println("[INFO] [LOGGING]: Successfully logged data point to Adafruit IO.");
+        errorOccurred = response.indexOf("Bad request") >= 0;
+
+        if (!errorOccurred) {
+          Serial.println("[INFO] [LOGGING]: Successfully logged data point to Adafruit IO.");
+        } else {
+          Serial.print("[ERROR] [LOGGING]: Failed to log data. Response: ");
+          Serial.println(response);
+        }
       } else {
         Serial.print("[ERROR] [LOGGING]: Failed to log data. Response: ");
         Serial.println(response);
