@@ -4,17 +4,21 @@
 #include "adafruit-io.h"
 #include "slm.h"
 
-void runtimeChecks() {
-    if (LEQ_PERIOD < 1.0) {// seconds
-        #error "[ERROR] [SLM]: LEQ_PERIOD is too short. Values between 1 and 60 seconds are recommended."
+// Run the checks after Serial.begin()
+bool runtimeChecks() {
+    if (LEQ_PERIOD < 1.0) { // seconds
+        Serial.println( "[ERROR] [SLM]: LEQ_PERIOD is too short. Values between 1 and 60 seconds are recommended.");
+        return false;
     }
 
     if (LOGGING_PERIOD/LEQ_PERIOD < 10.0) {
-        #error "[ERROR] [SLM]: LOGGING_PERIOD must be at least 10 times the LEQ_PERIOD."
+        Serial.println( "[ERROR] [SLM]: LOGGING_PERIOD must be at least 10 times the LEQ_PERIOD.");
+        return false;
     }
 
     if (MIC_OFFSET_DB < 0.0) {// dBA
-        #error "[ERROR] [SLM]: MIC_OFFSET_DB can't be negative."
+        Serial.println( "[ERROR] [SLM]: MIC_OFFSET_DB can't be negative.");
+        return false;
     }
 
     /*
@@ -29,14 +33,14 @@ void runtimeChecks() {
 
     double MAX_DOUBLE = 1.7e308;
     #define MIC_DATA_BITS 24
-    float MAX_FLOAT_SQR = (((1 << MIC_DATA_BITS)-1) * ((1 << MIC_DATA_BITS)-1));
+    float MAX_FLOAT_SQR = pow((pow(2, MIC_DATA_BITS) - 1), 2);
 
     if (LOGGING_PERIOD/LEQ_PERIOD >= MAX_DOUBLE/(3*MAX_FLOAT_SQR)) {
-        #error "[ERROR] [SLM]: LOGGING_PERIOD is too long. Values between 1 and 10 minutes are recommended."
+        Serial.println( "[ERROR] [SLM]: LOGGING_PERIOD is too long. Values between 1 and 10 minutes are recommended."
     }
 
     if (LEQ_PERIOD*SAMPLES_SHORT >= MAX_DOUBLE/(3*MAX_FLOAT_SQR)) {
-        #error "[ERROR] [SLM]: LEQ_PERIOD is too long. Values between 1 and 60 seconds are recommended."
+        Serial.println( "[ERROR] [SLM]: LEQ_PERIOD is too long. Values between 1 and 60 seconds are recommended."
     }
 
     Instead, the following checks are used to keep the values within reasonable operational limits:
@@ -44,18 +48,23 @@ void runtimeChecks() {
 
     // Note that the allowed range is larger than the recommended one
     if ((LOGGING_PERIOD > 60.0*10.0) || (LOGGING_PERIOD < 5.0)) { // seconds
-        #error "[ERROR] [SLM]: LOGGING_PERIOD is out of range. Values between 1 and 10 minutes are recommended."
+        Serial.println("[ERROR] [SLM]: LOGGING_PERIOD is out of range. Values between 1 and 10 minutes are recommended.");
+        return false;
     }
 
     if ((LEQ_PERIOD > 60.0) || (LEQ_PERIOD < 0.125)) { // seconds
-        #error "[ERROR] [SLM]: LEQ_PERIOD is out of range. Values between 1 and 60 seconds are recommended."
+        Serial.println("[ERROR] [SLM]: LEQ_PERIOD is out of range. Values between 1 and 60 seconds are recommended.");
+        return false;
     }
 
     #define NUMBER_OF_LOGGED_VARIABLES 3
 
     if (LOGGING_QUEUE_SIZE <= NUMBER_OF_LOGGED_VARIABLES*HTTP_RESPONSE_TIMEOUT/(LOGGING_PERIOD*1000)) {
-        #error "[ERROR] [LOGGING]: logging_queue is too small."
+        Serial.println("[ERROR] [LOGGING]: logging_queue is too small.");
+        return false;
     }
+
+    return true; // No errors
 }
 
 #endif // CHECKS_H

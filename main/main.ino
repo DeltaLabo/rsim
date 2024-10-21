@@ -32,12 +32,15 @@ QueueHandle_t logging_queue;
 
 
 void setup() {
-  //runtimeChecks();
-
   setCpuFrequencyMhz(240);
 
   // Init serial for logging
   Serial.begin(115200);
+
+  if (runtimeChecks() == false) {
+    Serial.println("[ERROR]: Cannot start with invalid parameters.");
+    while (true) {} // Halt indefinitely
+  }
 
   // Create FreeRTOS queue
   samples_queue = xQueueCreate(100, sizeof(float));
