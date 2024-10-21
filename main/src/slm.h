@@ -16,7 +16,7 @@
 
 // SLM Configuration
 #define LEQ_PERIOD 2.0 // second(s)
-#define LOGGING_PERIOD 5.0 // second(s)
+#define LOGGING_PERIOD 20.0 // second(s)
 #define MIC_OFFSET_DB 1.3 // Offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration.
 
 // Adafruit IO feed keys for logging
