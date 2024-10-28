@@ -10,8 +10,8 @@
 
 
 // Set to enable/disable functionality
-bool USE_BATTERY = false;
-bool USE_LOGGING = true;
+bool USE_BATTERY = true;
+bool USE_LOGGING = false;
 
 
 QueueHandle_t samples_queue;
@@ -54,7 +54,7 @@ void setup() {
   if (USE_LOGGING == true) {
     // Create the WiFi connection task and pin it to the second core (ID=1)
     xTaskCreatePinnedToCore(wifi_checker_task, "WiFi Checker", WIFI_TASK_STACK, NULL, WIFI_TASK_PRI, NULL, 1);
-  
+
     // Initialize the logging queue
     logging_queue = xQueueCreate(LOGGING_QUEUE_SIZE, sizeof(LogData));
 
