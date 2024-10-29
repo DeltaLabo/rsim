@@ -65,7 +65,7 @@ bool runtimeChecks() {
         return false;
     }
 
-    if ((BATTERY_CHECK_PERIOD > 180.0) || (BATTERY_CHECK_PERIOD < 30.0)) { // seconds
+    if ((BATTERY_CHECK_PERIOD > 180000) || (BATTERY_CHECK_PERIOD < 30000)) { // milliseconds
         Serial.println("[ERROR] [SLM]: BATTERY_CHECK_PERIOD is out of range. Values between 30 and 180 seconds are recommended.");
         return false;
     }
