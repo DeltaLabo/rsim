@@ -11,7 +11,7 @@
 
 // Set to enable/disable functionality
 bool USE_BATTERY = true;
-bool USE_LOGGING = false;
+bool USE_LOGGING = true;
 
 
 QueueHandle_t samples_queue;
