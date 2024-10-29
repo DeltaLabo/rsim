@@ -58,7 +58,7 @@ void logToAdafruitIO(const String &value_str, const char* feed_key) {
 
     Serial.print("[INFO] [LOGGING]: Attempting to log to Adafruit IO feed ");
     Serial.print(feed_key);
-    Serial.print(", value (dBA): ");
+    Serial.print(", value: ");
     Serial.println(value_str);
 
     // Indicate that there's a pending HTTP response
