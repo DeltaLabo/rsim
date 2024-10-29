@@ -1,5 +1,9 @@
 #include "battery-checker.h"
 
+
+extern bool USE_LOGGING;
+extern QueueHandle_t logging_queue;
+
 // Battery voltage and current meter
 Adafruit_INA219 ina219;
 
@@ -37,16 +41,26 @@ void battery_checker_task(void* parameter) {
       // Turn on charging indicator LED
       digitalWrite(CHARGER_LED_PIN, LOW);
       Serial.println("[INFO] [POWER]: The battery is charging.");
+    } else if (loadvoltage > MIN_CHARGED_VOLTAGE && current_mA >= MIN_CONNECTED_CURRENT) {
+      batteryState = CHARGED;
+      // Turn off charging indicator LED
+      digitalWrite(CHARGER_LED_PIN, HIGH);
+      Serial.println("[INFO] [POWER]: The battery has finished charging. The charger can be optionally disconnected.");
     } else if (loadvoltage > MIN_CHARGED_VOLTAGE) {
       batteryState = ENOUGH_BATTERY;
       // Turn off charging indicator LED
       digitalWrite(CHARGER_LED_PIN, HIGH);
       Serial.println("[INFO] [POWER]: The battery is charged.");
-    } else{
+    } else {
       batteryState = LOW_BATTERY;
       // Turn on charging indicator LED
       digitalWrite(CHARGER_LED_PIN, LOW);
-      Serial.println("[WARNING] [POWER]: The battery voltage is low.");
+      Serial.println("[WARNING] [POWER]: The battery voltage is low. Please connect the charger.");
+    }
+
+    if (USE_LOGGING == true) {
+      LogData logdata_bat = {String(batteryState), bat_feed_key};
+      xQueueSend(logging_queue, &logdata_bat, portMAX_DELAY);
     }
 
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(BATTERY_CHECK_PERIOD));
