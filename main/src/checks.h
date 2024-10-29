@@ -3,6 +3,7 @@
 
 #include "adafruit-io.h"
 #include "slm.h"
+#include "battery-checker.h"
 
 // Run the checks after Serial.begin()
 bool runtimeChecks() {
@@ -59,8 +60,13 @@ bool runtimeChecks() {
 
     #define NUMBER_OF_LOGGED_VARIABLES 3
 
-    if (LOGGING_QUEUE_SIZE <= NUMBER_OF_LOGGED_VARIABLES*HTTP_RESPONSE_TIMEOUT/(LOGGING_PERIOD*1000)) {
-        Serial.println("[ERROR] [LOGGING]: logging_queue is too small.");
+    if (LOGGING_QUEUE_SIZE <= (NUMBER_OF_LOGGED_VARIABLES*HTTP_RESPONSE_TIMEOUT/(LOGGING_PERIOD*1000) + (HTTP_RESPONSE_TIMEOUT/BATTERY_CHECK_PERIOD + 1))) {
+        Serial.println("[ERROR] [LOGGING]: LOGGING_QUEUE_SIZE is too small.");
+        return false;
+    }
+
+    if ((BATTERY_CHECK_PERIOD > 180.0) || (BATTERY_CHECK_PERIOD < 30.0)) { // seconds
+        Serial.println("[ERROR] [SLM]: BATTERY_CHECK_PERIOD is out of range. Values between 30 and 180 seconds are recommended.");
         return false;
     }
 
