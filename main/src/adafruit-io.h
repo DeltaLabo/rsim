@@ -19,6 +19,12 @@
 
 #define HTTP_RESPONSE_TIMEOUT 5000 // ms
 
+// Adafruit IO feed keys for logging
+#define eq_feed_key "equivalent-noise-level"
+#define max_feed_key "maximum-noise-level"
+#define min_feed_key "minimum-noise-level"
+#define bat_feed_key "battery-state"
+
 
 void wifi_checker_task(void* parameter);
 void logToAdafruitIO(const String &value_str, const char* feed_key);

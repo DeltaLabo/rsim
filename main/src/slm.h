@@ -12,17 +12,13 @@
 #include "pins.h"
 #include "color-control.h"
 #include "log-data.h"
+#include "adafruit-io.h"
 
 
 // SLM Configuration
 #define LEQ_PERIOD 2.0 // second(s)
 #define LOGGING_PERIOD 20.0 // second(s)
 #define MIC_OFFSET_DB 1.3 // Offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration.
-
-// Adafruit IO feed keys for logging
-#define eq_feed_key "equivalent-noise-level"
-#define max_feed_key "maximum-noise-level"
-#define min_feed_key "minimum-noise-level"
 
 #define LOGGING_QUEUE_SIZE 25
 
