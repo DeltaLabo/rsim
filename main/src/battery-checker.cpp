@@ -41,28 +41,31 @@ void battery_checker_task(void* parameter) {
       // Turn on charging indicator LED
       digitalWrite(CHARGER_LED_PIN, LOW);
       Serial.print("[INFO] [POWER]: The battery is charging.");
-      Serial.print(" Voltage (V): ");
-      Serial.print(loadvoltage);
-      Serial.print(", Current (mA): ");
-      Serial.println(current_mA);
-    } else if (loadvoltage > MIN_CHARGED_VOLTAGE && current_mA >= MIN_CONNECTED_CURRENT) {
+    } else if (loadvoltage >= MIN_CHARGED_VOLTAGE && (batteryState == CHARGING || current_mA <= MIN_CHARGING_CURRENT)) {
       batteryState = CHARGED;
       // Turn off charging indicator LED
       digitalWrite(CHARGER_LED_PIN, HIGH);
-      Serial.println("[INFO] [POWER]: The battery has finished charging. The charger can be optionally disconnected.");
-    } else if (loadvoltage > MIN_CHARGED_VOLTAGE) {
+      Serial.print("[INFO] [POWER]: The battery has finished charging. The charger can be optionally disconnected.");
+    } else if (loadvoltage >= MIN_CHARGED_VOLTAGE) {
       batteryState = ENOUGH_BATTERY;
       // Turn off charging indicator LED
       digitalWrite(CHARGER_LED_PIN, HIGH);
       Serial.print("[INFO] [POWER]: The battery is charged.");
-      Serial.print(" Voltage (V): ");
-      Serial.println(loadvoltage);
+    } else if (loadvoltage == 0.0) {
+      // Turn off charging indicator LED
+      digitalWrite(CHARGER_LED_PIN, HIGH);
+      Serial.print("[INFO] [POWER]: The battery is disconnected.");
     } else {
       batteryState = LOW_BATTERY;
       // Turn on charging indicator LED
       digitalWrite(CHARGER_LED_PIN, LOW);
-      Serial.println("[WARNING] [POWER]: The battery voltage is low. Please connect the charger.");
+      Serial.print("[WARNING] [POWER]: The battery voltage is low. Please connect the charger.");
     }
+  
+    Serial.print(" Voltage (V): ");
+    Serial.print(loadvoltage);
+    Serial.print(", Current (mA): ");
+    Serial.println(current_mA);
 
     if (USE_LOGGING == true) {
       LogData logdata_bat = {String(batteryState), bat_feed_key};
