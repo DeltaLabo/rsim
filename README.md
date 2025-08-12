@@ -8,6 +8,11 @@ Room sound intensity meter
 * [Anthony Arguedas](mailto:antarguedas@estudiantec.r)
 * [Josué Morera](mailto:josuemr0106@estudiantec.cr)
 
+### Toolset
+* Code, Documentation, Task Management: GitHub
+* CAD, CAM, PCB: Fusion 360
+* Systems Engineering: Capella
+
 ### What is this repository for?
 
 * This repository was created to develop an ESP32-based ambient noise level meter.
